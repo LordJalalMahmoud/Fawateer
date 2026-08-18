@@ -7,7 +7,7 @@ import {
   saveStoredInvoices, 
   getStoredProducts, 
   saveStoredProducts, 
-  resetToSampleData,
+  resetToEmptyData,
   exportInvoicesToCSV 
 } from '@/lib/storage';
 import { 
@@ -24,11 +24,10 @@ import { StatsOverview } from '@/components/StatsOverview';
 import { InvoiceList } from '@/components/InvoiceList';
 import { InvoiceModal } from '@/components/InvoiceModal';
 import { InvoiceViewModal } from '@/components/InvoiceViewModal';
-import { SmartTextImportModal } from '@/components/SmartTextImportModal';
 import { CustomerLedgerModal } from '@/components/CustomerLedgerModal';
 import { ProductCatalogModal } from '@/components/ProductCatalogModal';
 import { PaymentDrawer } from '@/components/PaymentDrawer';
-import { Sparkles, FilePlus, Cloud, Check } from 'lucide-react';
+import { FilePlus, Check, Package, Users } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 function InvoicesDashboard() {
@@ -43,10 +42,8 @@ function InvoicesDashboard() {
 
     const unsubInvoices = subscribeToInvoices(
       (remoteInvoices) => {
-        if (remoteInvoices && remoteInvoices.length > 0) {
-          setInvoices(remoteInvoices);
-          saveStoredInvoices(remoteInvoices);
-        }
+        setInvoices(remoteInvoices || []);
+        saveStoredInvoices(remoteInvoices || []);
         setSyncStatus('synced');
       },
       () => {
@@ -56,10 +53,8 @@ function InvoicesDashboard() {
 
     const unsubProducts = subscribeToProducts(
       (remoteProducts) => {
-        if (remoteProducts && remoteProducts.length > 0) {
-          setProducts(remoteProducts);
-          saveStoredProducts(remoteProducts);
-        }
+        setProducts(remoteProducts || []);
+        saveStoredProducts(remoteProducts || []);
       },
       () => {
         setSyncStatus('local');
@@ -82,7 +77,6 @@ function InvoicesDashboard() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
 
-  const [isSmartImportOpen, setIsSmartImportOpen] = useState(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState(false);
   const [isProductCatalogOpen, setIsProductCatalogOpen] = useState(false);
 
@@ -165,7 +159,7 @@ function InvoicesDashboard() {
       // Create new
       const updated = [savedInvoice, ...invoices];
       updateInvoices(updated);
-      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+      confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
     }
     
     try {
@@ -221,27 +215,13 @@ function InvoicesDashboard() {
     }
   };
 
-  const handleImportInvoices = async (importedInvoices: Invoice[]) => {
-    const updated = [...importedInvoices, ...invoices];
-    updateInvoices(updated);
-    for (const inv of importedInvoices) {
-      try {
-        await saveInvoiceToFirestore(inv);
-      } catch (e) {
-        console.warn('Firestore import item save error:', e);
+  const handleClearAllData = async () => {
+    if (window.confirm('هل أنت متأكد من تفريغ ومسح كافة الفواتير من النظام وقاعدة البيانات؟')) {
+      for (const inv of invoices) {
+        await deleteInvoiceFromFirestore(inv.id).catch(() => {});
       }
-    }
-  };
-
-  const handleResetData = async () => {
-    if (window.confirm('هل تريد إعادة تعيين فواتير النظام إلى بيانات النماذج الأصلية (الصالحين، الجراش، السعادة، محمود الصعيدي، الشاعر...)؟')) {
-      const { invoices: resetInv, products: resetProd } = resetToSampleData();
-      setInvoices(resetInv);
-      setProducts(resetProd);
-      for (const inv of resetInv) {
-        await saveInvoiceToFirestore(inv).catch(() => {});
-      }
-      await saveProductsToFirestore(resetProd).catch(() => {});
+      resetToEmptyData();
+      setInvoices([]);
     }
   };
 
@@ -255,18 +235,17 @@ function InvoicesDashboard() {
       {/* Top Navbar */}
       <Navbar
         onNewInvoice={handleNewInvoice}
-        onOpenSmartImport={() => setIsSmartImportOpen(true)}
         onOpenCustomerLedger={() => setIsCustomerLedgerOpen(true)}
         onOpenCatalog={() => setIsProductCatalogOpen(true)}
         onExportCSV={handleExportCSV}
-        onResetData={handleResetData}
+        onClearData={handleClearAllData}
         invoicesCount={invoices.length}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
         
-        {/* Quick Welcome & Assistant Banner */}
+        {/* Quick Header Banner */}
         <div className="bg-gradient-to-l from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-5 sm:p-7 text-white shadow-lg shadow-slate-900/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print relative overflow-hidden">
           
           {/* Subtle decoration */}
@@ -274,32 +253,35 @@ function InvoicesDashboard() {
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
           <div className="space-y-1.5 z-10">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>مساعد إدارة الفواتير والمبيعات السحابي</span>
-            </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-              فواتير المنظفات وحسابات العملاء والتحصيل
+              لوحة إدارة الفواتير والمبيعات السحابية
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              مرتبط سحابياً مع قاعدة بيانات Firebase • مزامنة لحظية بين أجهزتك • تحكم كامل في فواتير المبيعات وتسجيل الدفعات النقدية وطباعة الفواتير والإيصالات.
+              متصلة سحابياً مع Firebase Firestore • مزامنة فورية ومستمرة بين أجهزتك • إصدار الفواتير وطباعة الإيصالات ومتابعة مديونيات العملاء بدقة.
             </p>
           </div>
 
-          {/* Quick CTA buttons */}
+          {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5 z-10 w-full md:w-auto">
             <button
-              onClick={() => setIsSmartImportOpen(true)}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 active:bg-purple-800 rounded-xl shadow-md shadow-purple-600/30 transition-all cursor-pointer whitespace-nowrap"
+              onClick={() => setIsProductCatalogOpen(true)}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer whitespace-nowrap"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>تحويل نص لفاتورة</span>
+              <Package className="w-4 h-4 text-emerald-400" />
+              <span>دليل المنتجات</span>
+            </button>
+            <button
+              onClick={() => setIsCustomerLedgerOpen(true)}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Users className="w-4 h-4 text-teal-400" />
+              <span>كشف الحسابات</span>
             </button>
             <button
               onClick={handleNewInvoice}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-900 bg-white hover:bg-slate-100 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-md shadow-emerald-600/30 transition-all cursor-pointer whitespace-nowrap"
             >
-              <FilePlus className="w-4 h-4 text-emerald-600" />
+              <FilePlus className="w-4 h-4" />
               <span>فاتورة جديدة</span>
             </button>
           </div>
@@ -387,15 +369,7 @@ function InvoicesDashboard() {
         onEditInvoice={handleEditInvoice}
       />
 
-      {/* 3. Smart Text to Invoice Parser Modal */}
-      <SmartTextImportModal
-        isOpen={isSmartImportOpen}
-        onClose={() => setIsSmartImportOpen(false)}
-        onImportInvoices={handleImportInvoices}
-        existingInvoicesCount={invoices.length}
-      />
-
-      {/* 4. Customer Accounts & Balances Ledger Modal */}
+      {/* 3. Customer Accounts & Balances Ledger Modal */}
       <CustomerLedgerModal
         isOpen={isCustomerLedgerOpen}
         onClose={() => setIsCustomerLedgerOpen(false)}
@@ -403,7 +377,7 @@ function InvoicesDashboard() {
         onViewInvoice={handleViewInvoice}
       />
 
-      {/* 5. Product & Price Catalog Modal */}
+      {/* 4. Product & Price Catalog Modal */}
       <ProductCatalogModal
         isOpen={isProductCatalogOpen}
         onClose={() => setIsProductCatalogOpen(false)}
@@ -411,7 +385,7 @@ function InvoicesDashboard() {
         onSaveProducts={updateProducts}
       />
 
-      {/* 6. Quick Payment Collection Drawer */}
+      {/* 5. Quick Payment Collection Drawer */}
       <PaymentDrawer
         isOpen={isPaymentDrawerOpen}
         onClose={() => {

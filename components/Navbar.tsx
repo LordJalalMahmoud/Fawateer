@@ -3,35 +3,31 @@
 import React from 'react';
 import { 
   FilePlus, 
-  Sparkles, 
   Users, 
   Package, 
   Download, 
   RotateCcw,
   ReceiptText,
   ShieldCheck,
-  LogOut,
-  CloudCheck
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 interface NavbarProps {
   onNewInvoice: () => void;
-  onOpenSmartImport: () => void;
   onOpenCustomerLedger: () => void;
   onOpenCatalog: () => void;
   onExportCSV: () => void;
-  onResetData: () => void;
+  onClearData: () => void;
   invoicesCount: number;
 }
 
 export function Navbar({
   onNewInvoice,
-  onOpenSmartImport,
   onOpenCustomerLedger,
   onOpenCatalog,
   onExportCSV,
-  onResetData,
+  onClearData,
   invoicesCount,
 }: NavbarProps) {
   const { user, logout } = useAuth();
@@ -98,23 +94,13 @@ export function Navbar({
               <span className="hidden xl:inline">تصدير Excel</span>
             </button>
 
-            {/* Reset Data */}
+            {/* Clear All Invoices button */}
             <button
-              onClick={onResetData}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              title="إعادة تعيين البيانات الأصلية"
+              onClick={onClearData}
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+              title="تفريغ ومسح كافة الفواتير"
             >
               <RotateCcw className="w-4 h-4" />
-            </button>
-
-            {/* Smart Text to Invoice */}
-            <button
-              onClick={onOpenSmartImport}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-all shadow-xs cursor-pointer"
-              title="تحويل نص أو رسالة واتساب إلى فاتورة"
-            >
-              <Sparkles className="w-4 h-4 text-purple-600 animate-pulse" />
-              <span>تحويل نص لفاتورة</span>
             </button>
 
             {/* New Invoice Button */}

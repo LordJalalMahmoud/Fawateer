@@ -52,12 +52,12 @@ export function saveStoredProducts(products: ProductCatalogItem[]): void {
   }
 }
 
-export function resetToSampleData(): { invoices: Invoice[]; products: ProductCatalogItem[] } {
+export function resetToEmptyData(): { invoices: Invoice[]; products: ProductCatalogItem[] } {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(INITIAL_INVOICES));
-    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(INITIAL_PRODUCTS));
+    localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify([]));
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify([]));
   }
-  return { invoices: INITIAL_INVOICES, products: INITIAL_PRODUCTS };
+  return { invoices: [], products: [] };
 }
 
 export function generateInvoiceNumber(existingInvoices: Invoice[]): string {

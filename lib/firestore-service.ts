@@ -3,7 +3,6 @@ import {
   doc, 
   setDoc, 
   deleteDoc, 
-  getDocs, 
   onSnapshot, 
   query, 
   orderBy,
@@ -11,7 +10,6 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { Invoice, ProductCatalogItem } from './types';
-import { INITIAL_INVOICES, INITIAL_PRODUCTS } from './sample-data';
 
 const INVOICES_COLLECTION = 'invoices';
 const PRODUCTS_COLLECTION = 'products';
@@ -28,11 +26,6 @@ export function subscribeToInvoices(
   return onSnapshot(
     q,
     (snapshot) => {
-      if (snapshot.empty) {
-        // If empty, auto-seed with sample invoices so the dashboard is immediately ready
-        seedInitialInvoices();
-        return;
-      }
       const items: Invoice[] = [];
       snapshot.forEach((docSnap) => {
         items.push({ id: docSnap.id, ...docSnap.data() } as Invoice);
@@ -59,10 +52,6 @@ export function subscribeToProducts(
   return onSnapshot(
     colRef,
     (snapshot) => {
-      if (snapshot.empty) {
-        seedInitialProducts();
-        return;
-      }
       const items: ProductCatalogItem[] = [];
       snapshot.forEach((docSnap) => {
         items.push({ id: docSnap.id, ...docSnap.data() } as ProductCatalogItem);
@@ -116,37 +105,5 @@ export async function saveProductsToFirestore(products: ProductCatalogItem[]): P
     await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, PRODUCTS_COLLECTION);
-  }
-}
-
-/**
- * Seed initial sample invoices if Firestore is empty
- */
-async function seedInitialInvoices() {
-  try {
-    const batch = writeBatch(db);
-    for (const inv of INITIAL_INVOICES) {
-      const docRef = doc(db, INVOICES_COLLECTION, inv.id);
-      batch.set(docRef, inv);
-    }
-    await batch.commit();
-  } catch (error) {
-    console.warn('Seed initial invoices error:', error);
-  }
-}
-
-/**
- * Seed initial products if Firestore is empty
- */
-async function seedInitialProducts() {
-  try {
-    const batch = writeBatch(db);
-    for (const prod of INITIAL_PRODUCTS) {
-      const docRef = doc(db, PRODUCTS_COLLECTION, prod.id);
-      batch.set(docRef, prod);
-    }
-    await batch.commit();
-  } catch (error) {
-    console.warn('Seed initial products error:', error);
   }
 }
