@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Invoice record for customer transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "date": { "type": "string" },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "customerAddress": { "type": "string", "maxLength": 200 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "discount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["PAID", "UNPAID", "PARTIAL"] },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "invoiceNumber", "date", "customerName", "items", "totalAmount", "status"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product in inventory catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 50 },
+        "defaultPrice": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 30 }
+      },
+      "required": ["id", "name", "defaultPrice", "unit"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Invoices collection accessible to admins"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Product catalog accessible to admins"
+    },
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Admin privilege collection"
+    }
+  }
+}

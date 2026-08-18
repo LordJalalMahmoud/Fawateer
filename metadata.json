@@ -1,0 +1,6 @@
+{
+  "name": "إدارة الفواتير والمبيعات",
+  "description": "تطبيق متكامل لإدارة فواتير المبيعات، حسابات العملاء، تتبع التحصيلات، وتحويل النصوص والرسائل إلى فواتير منظمة وطباعتها.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
