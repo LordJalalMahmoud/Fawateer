@@ -29,7 +29,25 @@ import { CustomerLedgerModal } from '@/components/CustomerLedgerModal';
 import { ProductCatalogModal } from '@/components/ProductCatalogModal';
 import { TeamManagementModal } from '@/components/TeamManagementModal';
 import { PaymentDrawer } from '@/components/PaymentDrawer';
-import { FilePlus, Check, Package, Users, CheckCircle2, AlertCircle, RefreshCw, Database, UserCheck } from 'lucide-react';
+import { MerchantAccountsView } from '@/components/MerchantAccountsView';
+import { MerchantStatementModal } from '@/components/MerchantStatementModal';
+import { AddMerchantGoodsModal } from '@/components/AddMerchantGoodsModal';
+import { AddMerchantPaymentModal } from '@/components/AddMerchantPaymentModal';
+import { NewMerchantModal } from '@/components/NewMerchantModal';
+import { 
+  FilePlus, 
+  Check, 
+  Package, 
+  Users, 
+  CheckCircle2, 
+  AlertCircle, 
+  RefreshCw, 
+  Database, 
+  UserCheck,
+  Building2,
+  Receipt,
+  UserPlus
+} from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 function InvoicesDashboard() {
@@ -37,6 +55,9 @@ function InvoicesDashboard() {
   const [invoices, setInvoices] = useState<Invoice[]>(() => getStoredInvoices());
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => getStoredProducts());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
+
+  // Main Dashboard View Mode: 'MERCHANTS' (حسابات التجار) vs 'INVOICES' (سجل الفواتير)
+  const [mainView, setMainView] = useState<'MERCHANTS' | 'INVOICES'>('MERCHANTS');
 
   // Toast / Alert Notification State
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -81,10 +102,10 @@ function InvoicesDashboard() {
     };
   }, [user]);
 
-  // Filter State
+  // Filter State for Invoices tab
   const [activeStatusFilter, setActiveStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID' | 'PARTIAL'>('ALL');
 
-  // Modals
+  // Standard Modals
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
@@ -97,6 +118,18 @@ function InvoicesDashboard() {
 
   const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
+
+  // Dedicated Merchant Accounts Modals
+  const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
+  const [statementMerchant, setStatementMerchant] = useState<string>('');
+
+  const [isAddGoodsModalOpen, setIsAddGoodsModalOpen] = useState(false);
+  const [goodsMerchant, setGoodsMerchant] = useState<{ name: string; phone?: string; address?: string }>({ name: '' });
+
+  const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
+  const [paymentMerchantData, setPaymentMerchantData] = useState<{ name: string; debt: number }>({ name: '', debt: 0 });
+
+  const [isNewMerchantModalOpen, setIsNewMerchantModalOpen] = useState(false);
 
   const [testingFirebase, setTestingFirebase] = useState(false);
 
@@ -118,7 +151,7 @@ function InvoicesDashboard() {
     }
   };
 
-  // Actions
+  // Actions: Invoice
   const handleNewInvoice = () => {
     setEditingInvoice(null);
     setIsInvoiceModalOpen(true);
@@ -175,11 +208,9 @@ function InvoicesDashboard() {
 
   const handleSaveInvoice = async (savedInvoice: Invoice) => {
     if (editingInvoice) {
-      // Update
       const updated = invoices.map(i => i.id === savedInvoice.id ? savedInvoice : i);
       updateInvoices(updated);
     } else {
-      // Create new
       const updated = [savedInvoice, ...invoices];
       updateInvoices(updated);
       confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
@@ -195,6 +226,177 @@ function InvoicesDashboard() {
 
     setIsInvoiceModalOpen(false);
     setEditingInvoice(null);
+  };
+
+  // Merchant Account Actions
+  const handleOpenStatement = (merchantName: string) => {
+    setStatementMerchant(merchantName);
+    setIsStatementModalOpen(true);
+  };
+
+  const handleOpenAddGoods = (merchantName: string, phone?: string, address?: string) => {
+    setGoodsMerchant({ name: merchantName, phone, address });
+    setIsAddGoodsModalOpen(true);
+  };
+
+  const handleOpenAddPayment = (merchantName: string, debt: number) => {
+    setPaymentMerchantData({ name: merchantName, debt });
+    setIsAddPaymentModalOpen(true);
+  };
+
+  const handleSaveDeliveryBatch = async (newDeliveryInvoice: Invoice) => {
+    const updated = [newDeliveryInvoice, ...invoices];
+    updateInvoices(updated);
+    confetti({ particleCount: 35, spread: 45, origin: { y: 0.7 } });
+
+    try {
+      await saveInvoiceToFirestore(newDeliveryInvoice);
+      showToast(`تم إضافة المسحوبات لحساب التاجر (${newDeliveryInvoice.customerName}) في Firebase`, 'success');
+    } catch (e: any) {
+      showToast(`تمت الإضافة محلياً: ${e?.message || e}`, 'error');
+    }
+  };
+
+  const handleApplyMerchantPayment = async ({
+    merchantName,
+    amount,
+    date,
+    method,
+    notes,
+  }: {
+    merchantName: string;
+    amount: number;
+    date: string;
+    method: string;
+    notes: string;
+  }) => {
+    let remainingToPay = amount;
+    const merchantInvoices = invoices
+      .filter(i => (i.customerName || '').trim().toLowerCase() === merchantName.trim().toLowerCase())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Oldest first
+
+    const modifiedInvoices: Invoice[] = [];
+
+    // Distribute payment across unpaid invoices
+    for (const inv of merchantInvoices) {
+      if (remainingToPay <= 0) break;
+      const debtOnInv = Number(inv.remainingAmount || (inv.totalAmount - (inv.paidAmount || 0)));
+      if (debtOnInv > 0) {
+        const payForThis = Math.min(debtOnInv, remainingToPay);
+        const newPaid = Number(((inv.paidAmount || 0) + payForThis).toFixed(2));
+        const newRemaining = Math.max(0, Number(((inv.totalAmount || 0) - newPaid).toFixed(2)));
+        const newStatus: PaymentStatus = newRemaining <= 0.01 ? 'PAID' : 'PARTIAL';
+
+        const updatedInv: Invoice = {
+          ...inv,
+          paidAmount: newPaid,
+          remainingAmount: newRemaining,
+          status: newStatus,
+          notes: inv.notes ? `${inv.notes} | دفعة (${method}) ${payForThis}ج` : `دفعة (${method}) ${payForThis}ج`,
+          updatedAt: new Date().toISOString(),
+        };
+
+        modifiedInvoices.push(updatedInv);
+        remainingToPay -= payForThis;
+      }
+    }
+
+    // Update state
+    if (modifiedInvoices.length > 0) {
+      const updatedAll = invoices.map(inv => {
+        const found = modifiedInvoices.find(m => m.id === inv.id);
+        return found ? found : inv;
+      });
+      updateInvoices(updatedAll);
+
+      // Push to Firestore
+      for (const m of modifiedInvoices) {
+        await saveInvoiceToFirestore(m).catch(() => {});
+      }
+      showToast(`تم تسجيل دفعة بقيمة ${amount.toLocaleString()} ج.م لحساب التاجر (${merchantName}) بنجاح!`, 'success');
+      confetti({ particleCount: 30, spread: 40 });
+    } else {
+      // If merchant had no unpaid invoices, save as credit adjustment delivery
+      const receiptInvoice: Invoice = {
+        id: `pay-${Date.now()}`,
+        invoiceNumber: `PAY-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, '0')}`,
+        date,
+        customerName: merchantName,
+        items: [{ id: 'it-pay', name: `تحصيل دفعة نقدية (${method})`, quantity: 1, unit: 'إيصال', unitPrice: 0, total: 0 }],
+        subtotal: 0,
+        taxRate: 0,
+        taxAmount: 0,
+        discount: 0,
+        totalAmount: 0,
+        paidAmount: amount,
+        remainingAmount: 0,
+        status: 'PAID',
+        notes: notes ? `${notes} | طريقة الدفع: ${method}` : `سداد دفعة نقدية: ${method}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const updatedAll = [receiptInvoice, ...invoices];
+      updateInvoices(updatedAll);
+      await saveInvoiceToFirestore(receiptInvoice).catch(() => {});
+      showToast(`تم تسجيل إيصال التحصيل لحساب التاجر (${merchantName})`, 'success');
+    }
+  };
+
+  const handleAddNewMerchant = async ({
+    name,
+    phone,
+    address,
+    openingDebt,
+  }: {
+    name: string;
+    phone: string;
+    address: string;
+    openingDebt: number;
+  }) => {
+    const currentYear = new Date().getFullYear();
+    const nextNum = invoices.length + 1;
+    const nowIso = new Date().toISOString();
+
+    const openingInvoice: Invoice = {
+      id: `m-init-${Date.now()}`,
+      invoiceNumber: `INV-${currentYear}-${String(nextNum).padStart(3, '0')}`,
+      date: new Date().toISOString().slice(0, 10),
+      customerName: name,
+      customerPhone: phone,
+      customerAddress: address,
+      items: [
+        {
+          id: 'init-1',
+          name: openingDebt > 0 ? 'رصيد افتتاحي / مديونية سابقة' : 'فتح حساب تاجر جديد',
+          quantity: 1,
+          unit: 'حساب',
+          unitPrice: openingDebt,
+          total: openingDebt,
+        },
+      ],
+      subtotal: openingDebt,
+      taxRate: 0,
+      taxAmount: 0,
+      discount: 0,
+      totalAmount: openingDebt,
+      paidAmount: 0,
+      remainingAmount: openingDebt,
+      status: openingDebt > 0 ? 'UNPAID' : 'PAID',
+      notes: 'تم فتح حساب التاجر وتوثيقه بالمنظومة',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    const updated = [openingInvoice, ...invoices];
+    updateInvoices(updated);
+    confetti({ particleCount: 40, spread: 50 });
+
+    try {
+      await saveInvoiceToFirestore(openingInvoice);
+      showToast(`تم إنشاء وتوثيق حساب التاجر (${name}) في Firebase`, 'success');
+    } catch (e: any) {
+      showToast(`تم الحفظ محلياً: ${e?.message || e}`, 'error');
+    }
   };
 
   const handleQuickPay = (invoice: Invoice) => {
@@ -243,13 +445,13 @@ function InvoicesDashboard() {
   };
 
   const handleClearAllData = async () => {
-    if (window.confirm('هل أنت متأكد من تفريغ ومسح كافة الفواتير من النظام وقاعدة البيانات؟')) {
+    if (window.confirm('هل أنت متأكد من تفريغ ومسح كافة البيانات من النظام وقاعدة البيانات؟')) {
       for (const inv of invoices) {
         await deleteInvoiceFromFirestore(inv.id).catch(() => {});
       }
       resetToEmptyData();
       setInvoices([]);
-      showToast('تم تفريغ كافة الفواتير بنجاح', 'info');
+      showToast('تم تفريغ كافة البيانات بنجاح', 'info');
     }
   };
 
@@ -314,7 +516,7 @@ function InvoicesDashboard() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
         
-        {/* Quick Header Banner */}
+        {/* Quick Header Banner with View Tabs */}
         <div className="bg-gradient-to-l from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-5 sm:p-7 text-white shadow-lg shadow-slate-900/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print relative overflow-hidden">
           
           {/* Subtle decoration */}
@@ -327,51 +529,22 @@ function InvoicesDashboard() {
               <span>مشروع Firebase النشط: <strong className="font-mono text-white">{projectId}</strong></span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-              لوحة إدارة الفواتير والمبيعات السحابية
+              منظومة حسابات التجار والفواتير السحابية
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              متصلة سحابياً مع Firebase Firestore • مزامنة فورية ومستمرة بين أجهزتك • إصدار الفواتير وطباعة الإيصالات ومتابعة مديونيات العملاء بدقة.
+              إدارة الحسابات الجارية لكل تاجر، تسجيل مسحوبات البضاعة والدفعات، وإصدار كشوف الحساب والفواتير المجمعة بنقرة واحدة.
             </p>
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Actions & Header Buttons */}
           <div className="flex flex-wrap items-center gap-2.5 z-10 w-full md:w-auto">
             
-            {/* Test Write to Firebase */}
             <button
-              type="button"
-              onClick={handleTestFirebaseConnection}
-              disabled={testingFirebase}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-emerald-300 bg-emerald-950/70 hover:bg-emerald-900/80 rounded-xl border border-emerald-800/70 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-              title="اختبار كتابة مستند تجريبي في Firestore للتحقق من الاتصال والصلاحيات"
+              onClick={() => setIsNewMerchantModalOpen(true)}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 active:bg-teal-800 rounded-xl shadow-md shadow-teal-600/30 transition-all cursor-pointer whitespace-nowrap"
             >
-              <RefreshCw className={`w-4 h-4 ${testingFirebase ? 'animate-spin' : ''}`} />
-              <span>{testingFirebase ? 'جارِ الاختبار...' : 'فحص الاتصال بـ Firebase'}</span>
-            </button>
-
-            {/* Team Management */}
-            <button
-              onClick={() => setIsTeamModalOpen(true)}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-teal-300 bg-teal-950/70 hover:bg-teal-900/80 rounded-xl border border-teal-800/70 shadow-xs transition-all cursor-pointer whitespace-nowrap"
-            >
-              <UserCheck className="w-4 h-4 text-teal-400" />
-              <span>المدراء المصرح لهم</span>
-            </button>
-
-            <button
-              onClick={() => setIsProductCatalogOpen(true)}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Package className="w-4 h-4 text-emerald-400" />
-              <span>دليل المنتجات</span>
-            </button>
-
-            <button
-              onClick={() => setIsCustomerLedgerOpen(true)}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Users className="w-4 h-4 text-teal-400" />
-              <span>كشف الحسابات</span>
+              <UserPlus className="w-4 h-4" />
+              <span>+ فتح حساب تاجر</span>
             </button>
 
             <button
@@ -385,24 +558,78 @@ function InvoicesDashboard() {
 
         </div>
 
-        {/* Stats KPIs Overview */}
-        <StatsOverview
-          invoices={invoices}
-          onFilterStatus={setActiveStatusFilter}
-          activeStatusFilter={activeStatusFilter}
-        />
+        {/* View Mode Switcher (حسابات التجار vs سجل الفواتير) */}
+        <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200 shadow-2xs no-print">
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            <button
+              onClick={() => setMainView('MERCHANTS')}
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                mainView === 'MERCHANTS'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Building2 className="w-4 h-4 text-emerald-400" />
+              <span>حسابات التجار والعملاء (كشف الحساب الجاري)</span>
+            </button>
 
-        {/* Invoices List Table & Filters */}
-        <InvoiceList
-          invoices={invoices}
-          onViewInvoice={handleViewInvoice}
-          onEditInvoice={handleEditInvoice}
-          onDuplicateInvoice={handleDuplicateInvoice}
-          onDeleteInvoice={handleDeleteInvoice}
-          onQuickPay={handleQuickPay}
-          activeStatusFilter={activeStatusFilter}
-          onStatusFilterChange={setActiveStatusFilter}
-        />
+            <button
+              onClick={() => setMainView('INVOICES')}
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                mainView === 'INVOICES'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Receipt className="w-4 h-4 text-teal-400" />
+              <span>سجل الفواتير العامة ({invoices.length})</span>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 pl-3">
+            <button
+              onClick={handleTestFirebaseConnection}
+              disabled={testingFirebase}
+              className="text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${testingFirebase ? 'animate-spin' : ''}`} />
+              <span>فحص الاتصال</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Dynamic View Content */}
+        {mainView === 'MERCHANTS' ? (
+          /* VIEW 1: Merchant Accounts Hub */
+          <MerchantAccountsView
+            invoices={invoices}
+            productCatalog={products}
+            onOpenNewMerchant={() => setIsNewMerchantModalOpen(true)}
+            onOpenAddGoods={handleOpenAddGoods}
+            onOpenAddPayment={handleOpenAddPayment}
+            onOpenStatement={handleOpenStatement}
+          />
+        ) : (
+          /* VIEW 2: Invoices Timeline & KPIs */
+          <div className="space-y-6">
+            <StatsOverview
+              invoices={invoices}
+              onFilterStatus={setActiveStatusFilter}
+              activeStatusFilter={activeStatusFilter}
+            />
+
+            <InvoiceList
+              invoices={invoices}
+              onViewInvoice={handleViewInvoice}
+              onEditInvoice={handleEditInvoice}
+              onDuplicateInvoice={handleDuplicateInvoice}
+              onDeleteInvoice={handleDeleteInvoice}
+              onQuickPay={handleQuickPay}
+              activeStatusFilter={activeStatusFilter}
+              onStatusFilterChange={setActiveStatusFilter}
+            />
+          </div>
+        )}
 
       </main>
 
@@ -410,7 +637,7 @@ function InvoicesDashboard() {
       <footer className="mt-auto border-t border-slate-200 bg-white py-5 text-center text-xs text-slate-500 no-print">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span>منظومة إدارة الفواتير والمبيعات وحسابات العملاء • متصل سحابياً</span>
+            <span>منظومة إدارة حسابات التجار ومبيعات المنظفات • متصل سحابياً</span>
             <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
               <Check className="w-3 h-3 text-emerald-600" />
               {syncStatus === 'synced' ? 'متزامن لحظياً مع Firestore' : syncStatus === 'syncing' ? 'جارِ المزامنة...' : 'يعمل محلياً'}
@@ -422,13 +649,6 @@ function InvoicesDashboard() {
               className="text-teal-700 hover:underline cursor-pointer"
             >
               المدراء المصرح لهم
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setIsCustomerLedgerOpen(true)}
-              className="text-teal-700 hover:underline cursor-pointer"
-            >
-              كشف الحسابات
             </button>
             <span>•</span>
             <button
@@ -504,6 +724,52 @@ function InvoicesDashboard() {
         }}
         invoice={paymentInvoice}
         onUpdatePayment={handleUpdatePayment}
+      />
+
+      {/* 7. Dedicated Merchant Statement & Consolidated Invoice Modal */}
+      <MerchantStatementModal
+        isOpen={isStatementModalOpen}
+        onClose={() => {
+          setIsStatementModalOpen(false);
+          setStatementMerchant('');
+        }}
+        merchantName={statementMerchant}
+        invoices={invoices}
+      />
+
+      {/* 8. Add Goods Delivery to Merchant Modal */}
+      <AddMerchantGoodsModal
+        isOpen={isAddGoodsModalOpen}
+        onClose={() => {
+          setIsAddGoodsModalOpen(false);
+          setGoodsMerchant({ name: '' });
+        }}
+        merchantName={goodsMerchant.name}
+        defaultPhone={goodsMerchant.phone}
+        defaultAddress={goodsMerchant.address}
+        existingInvoices={invoices}
+        productCatalog={products}
+        onSaveDelivery={handleSaveDeliveryBatch}
+      />
+
+      {/* 9. Record Payment from Merchant Modal */}
+      <AddMerchantPaymentModal
+        isOpen={isAddPaymentModalOpen}
+        onClose={() => {
+          setIsAddPaymentModalOpen(false);
+          setPaymentMerchantData({ name: '', debt: 0 });
+        }}
+        merchantName={paymentMerchantData.name}
+        merchantRemainingDebt={paymentMerchantData.debt}
+        invoices={invoices}
+        onApplyPayment={handleApplyMerchantPayment}
+      />
+
+      {/* 10. Open New Merchant Account Modal */}
+      <NewMerchantModal
+        isOpen={isNewMerchantModalOpen}
+        onClose={() => setIsNewMerchantModalOpen(false)}
+        onAddMerchant={handleAddNewMerchant}
       />
 
     </div>
