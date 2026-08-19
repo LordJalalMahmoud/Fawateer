@@ -10,7 +10,9 @@ import {
   Calculator, 
   User, 
   Package, 
-  CreditCard
+  CreditCard,
+  Percent,
+  Edit2
 } from 'lucide-react';
 
 interface InvoiceModalProps {
@@ -28,10 +30,24 @@ function generateUniqueId(prefix = 'id'): string {
   return `${prefix}-${idCounter}`;
 }
 
+const PREDEFINED_PRODUCTS = [
+  { category: 'منتجات GC', name: 'GC المزيل الشامل', defaultUnit: 'كرتونة' },
+  { category: 'منتجات GC', name: 'GC منعم ومعطر الملابس – 1 لتر', defaultUnit: 'كرتونة' },
+  { category: 'منتجات GC', name: 'GC منعم ومعطر الملابس – 3 لتر', defaultUnit: 'كرتونة' },
+  { category: 'منتجات GC', name: 'GC معطر الجو والمفروشات', defaultUnit: 'كرتونة' },
+  { category: 'منتجات GC', name: 'GC ديتوكسي', defaultUnit: 'كرتونة' },
+
+  { category: 'منتجات AQ', name: 'AQ معطر جو', defaultUnit: 'كرتونة' },
+  { category: 'منتجات AQ', name: 'AQ منعم ملابس – 2 لتر', defaultUnit: 'كرتونة' },
+
+  { category: 'منتجات سيترس', name: 'سيترس مصر', defaultUnit: 'كرتونة' },
+  { category: 'منتجات سيترس', name: 'سيترس أمريكي', defaultUnit: 'كرتونة' },
+];
+
 function createEmptyItem(): InvoiceItem {
   return {
     id: generateUniqueId('item'),
-    name: '',
+    name: 'GC المزيل الشامل',
     unit: 'كرتونة',
     quantity: 1,
     unitPrice: 0,
@@ -64,24 +80,39 @@ function InvoiceModalContent({
   const [customerAddress, setCustomerAddress] = useState(
     initialInvoice?.customerAddress || ''
   );
-  const [notes, setNotes] = useState(
-    initialInvoice?.notes || ''
-  );
+
   const [items, setItems] = useState<InvoiceItem[]>(() => {
     if (initialInvoice && initialInvoice.items && initialInvoice.items.length > 0) {
       return initialInvoice.items;
     }
-    return [
-      { id: generateUniqueId('item'), name: 'سيترس أمريكي', unit: 'كرتونة', quantity: 1, unitPrice: 840, total: 840 }
-    ];
+    return [createEmptyItem()];
   });
-  
-  const [taxRate, setTaxRate] = useState<number>(initialInvoice?.taxRate || 0);
-  const [taxAmount, setTaxAmount] = useState<number>(initialInvoice?.taxAmount || 0);
-  const [discount, setDiscount] = useState<number>(initialInvoice?.discount || 0);
-  const [paidAmount, setPaidAmount] = useState<number>(initialInvoice?.paidAmount || 0);
 
-  // Autocomplete customer names
+  const [enableTax, setEnableTax] = useState<boolean>(
+    initialInvoice ? (Number(initialInvoice.taxRate || 0) > 0 || Number(initialInvoice.taxAmount || 0) > 0) : false
+  );
+  const [taxRate, setTaxRate] = useState<number>(
+    initialInvoice?.taxRate || 14
+  );
+  const [taxAmount, setTaxAmount] = useState<number>(
+    initialInvoice?.taxAmount || 0
+  );
+
+  const [discount, setDiscount] = useState<number>(
+    initialInvoice?.discount || 0
+  );
+
+  const [paidAmount, setPaidAmount] = useState<number>(
+    initialInvoice?.paidAmount || 0
+  );
+
+  const [notes, setNotes] = useState(
+    initialInvoice?.notes || ''
+  );
+
+  // Tracks which item rows are in custom typing mode
+  const [customItemMode, setCustomItemMode] = useState<Record<number, boolean>>({});
+
   const customerSuggestions = Array.from(
     new Set(existingInvoices.map(i => i.customerName.trim()).filter(Boolean))
   );
@@ -106,8 +137,13 @@ function InvoiceModalContent({
       if (field === 'name') {
         const found = productCatalog.find(p => p.name.toLowerCase() === String(val).toLowerCase());
         if (found) {
-          current.unit = found.unit;
-          current.unitPrice = found.defaultPrice;
+          if (found.unit) current.unit = found.unit;
+          if (found.defaultPrice > 0) current.unitPrice = found.defaultPrice;
+        } else {
+          const predefined = PREDEFINED_PRODUCTS.find(p => p.name === String(val));
+          if (predefined) {
+            current.unit = predefined.defaultUnit;
+          }
         }
       }
 
@@ -125,7 +161,9 @@ function InvoiceModalContent({
   const subtotal = items.reduce((sum, it) => sum + (Number(it.total) || 0), 0);
   
   // Tax calculation
-  const calculatedTax = taxRate > 0 ? Number(((subtotal * taxRate) / 100).toFixed(2)) : Number(taxAmount || 0);
+  const calculatedTax = enableTax 
+    ? (taxRate > 0 ? Number(((subtotal * taxRate) / 100).toFixed(2)) : Number(taxAmount || 0))
+    : 0;
   const totalAmount = Number((subtotal + calculatedTax - Number(discount || 0)).toFixed(2));
   const remainingAmount = Number((totalAmount - Number(paidAmount || 0)).toFixed(2));
 
@@ -153,8 +191,8 @@ function InvoiceModalContent({
       return;
     }
 
-    const timestamp = initialInvoice ? initialInvoice.createdAt : '2026-08-19T05:58:00.000Z';
-    const nowIso = initialInvoice ? '2026-08-19T05:58:00.000Z' : timestamp;
+    const timestamp = initialInvoice ? initialInvoice.createdAt : '2026-08-19T08:30:00.000Z';
+    const nowIso = initialInvoice ? '2026-08-19T08:30:00.000Z' : timestamp;
 
     const savedInvoice: Invoice = {
       id: initialInvoice ? initialInvoice.id : generateUniqueId('inv'),
@@ -165,7 +203,7 @@ function InvoiceModalContent({
       customerAddress: customerAddress.trim() || '',
       items: validItems,
       subtotal,
-      taxRate: taxRate > 0 ? taxRate : 0,
+      taxRate: enableTax && taxRate > 0 ? taxRate : 0,
       taxAmount: calculatedTax,
       discount: Number(discount) || 0,
       totalAmount,
@@ -179,6 +217,9 @@ function InvoiceModalContent({
 
     onSave(savedInvoice);
   };
+
+  const predefinedNames = new Set(PREDEFINED_PRODUCTS.map(p => p.name));
+  const otherCatalogProducts = productCatalog.filter(p => !predefinedNames.has(p.name));
 
   return (
     <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
@@ -194,7 +235,7 @@ function InvoiceModalContent({
               {initialInvoice ? `تعديل الفاتورة (${initialInvoice.invoiceNumber})` : 'إنشاء وتصميم فاتورة جديدة'}
             </h2>
             <p className="text-xs text-slate-500">
-              إدخال بيانات العميل، الأصناف، الكميات، والتحصيلات المالية
+              إدخال بيانات العميل، اختيار الأصناف، الكميات، والتحصيلات المالية
             </p>
           </div>
         </div>
@@ -313,7 +354,7 @@ function InvoiceModalContent({
               <thead className="bg-slate-100/80 text-slate-700 text-xs font-bold border-b border-slate-200">
                 <tr>
                   <th className="py-2.5 px-3 w-8">#</th>
-                  <th className="py-2.5 px-3">اسم الصنف / المنتج</th>
+                  <th className="py-2.5 px-3 min-w-[220px]">اسم المنتج / الصنف</th>
                   <th className="py-2.5 px-3 w-28">الوحدة</th>
                   <th className="py-2.5 px-3 w-24">الكمية</th>
                   <th className="py-2.5 px-3 w-28">سعر الكرتونة/الوحدة</th>
@@ -322,139 +363,175 @@ function InvoiceModalContent({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.map((item, idx) => (
-                  <tr key={item.id} className="hover:bg-slate-50/50">
-                    <td className="py-2 px-3 text-xs text-slate-400 font-bold">{idx + 1}</td>
-                    
-                    {/* Product Name with catalog autocomplete */}
-                    <td className="py-2 px-3">
-                      <input
-                        type="text"
-                        required
-                        placeholder="مثال: سيترس أمريكي، معطر AQ..."
-                        list="catalog-products-list"
-                        value={item.name}
-                        onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-sm bg-white border border-slate-200 rounded-md focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </td>
+                {items.map((item, idx) => {
+                  const isCustom = customItemMode[idx] || false;
 
-                    {/* Unit */}
-                    <td className="py-2 px-3">
-                      <select
-                        value={item.unit}
-                        onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-hidden"
-                      >
-                        <option value="كرتونة">كرتونة</option>
-                        <option value="عبوة">عبوة</option>
-                        <option value="لتر">لتر</option>
-                        <option value="قطعة">قطعة</option>
-                        <option value="كيلو">كيلو</option>
-                      </select>
-                    </td>
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/50">
+                      <td className="py-2 px-3 text-xs text-slate-400 font-bold">{idx + 1}</td>
+                      
+                      {/* Product Name Dropdown with categories */}
+                      <td className="py-2 px-3">
+                        {isCustom ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              required
+                              placeholder="اكتب اسم الصنف المخصص..."
+                              value={item.name}
+                              onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
+                              className="w-full px-2.5 py-1.5 text-sm bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setCustomItemMode(prev => ({ ...prev, [idx]: false }))}
+                              className="p-1.5 text-xs text-slate-500 hover:text-emerald-700 hover:bg-slate-100 rounded-md shrink-0 cursor-pointer"
+                              title="العودة لاختيار منتج من القائمة"
+                            >
+                              القائمة
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <select
+                              required
+                              value={item.name}
+                              onChange={(e) => {
+                                if (e.target.value === '__CUSTOM__') {
+                                  setCustomItemMode(prev => ({ ...prev, [idx]: true }));
+                                  handleItemChange(idx, 'name', '');
+                                } else {
+                                  handleItemChange(idx, 'name', e.target.value);
+                                }
+                              }}
+                              className="w-full px-2.5 py-1.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-md focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium text-slate-800"
+                            >
+                              <option value="">-- اختر المنتج من القائمة --</option>
+                              
+                              {/* منتجات GC */}
+                              <optgroup label="🌟 منتجات GC">
+                                <option value="GC المزيل الشامل">GC المزيل الشامل</option>
+                                <option value="GC منعم ومعطر الملابس – 1 لتر">GC منعم ومعطر الملابس – 1 لتر</option>
+                                <option value="GC منعم ومعطر الملابس – 3 لتر">GC منعم ومعطر الملابس – 3 لتر</option>
+                                <option value="GC معطر الجو والمفروشات">GC معطر الجو والمفروشات</option>
+                                <option value="GC ديتوكسي">GC ديتوكسي</option>
+                              </optgroup>
 
-                    {/* Quantity */}
-                    <td className="py-2 px-3">
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="any"
-                        required
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                        className="w-full px-2.5 py-1.5 text-sm font-semibold bg-white border border-slate-200 rounded-md focus:outline-hidden text-center"
-                      />
-                    </td>
+                              {/* منتجات AQ */}
+                              <optgroup label="🌟 منتجات AQ">
+                                <option value="AQ معطر جو">AQ معطر جو</option>
+                                <option value="AQ منعم ملابس – 2 لتر">AQ منعم ملابس – 2 لتر</option>
+                              </optgroup>
 
-                    {/* Unit Price */}
-                    <td className="py-2 px-3">
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        required
-                        value={item.unitPrice}
-                        onChange={(e) => handleItemChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                        className="w-full px-2.5 py-1.5 text-sm font-semibold bg-white border border-slate-200 rounded-md focus:outline-hidden text-center"
-                      />
-                    </td>
+                              {/* منتجات سيترس */}
+                              <optgroup label="🌟 منتجات سيترس">
+                                <option value="سيترس مصر">سيترس مصر</option>
+                                <option value="سيترس أمريكي">سيترس أمريكي</option>
+                              </optgroup>
 
-                    {/* Line Total */}
-                    <td className="py-2 px-3 font-bold text-slate-900 whitespace-nowrap">
-                      {item.total.toLocaleString()} ج.م
-                    </td>
+                              {/* Other products from catalog */}
+                              {otherCatalogProducts.length > 0 && (
+                                <optgroup label="📦 منتجات إضافية من الدليل">
+                                  {otherCatalogProducts.map(p => (
+                                    <option key={p.id} value={p.name}>{p.name}</option>
+                                  ))}
+                                </optgroup>
+                              )}
 
-                    {/* Remove */}
-                    <td className="py-2 px-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(idx)}
-                        className="text-slate-400 hover:text-rose-500 p-1 rounded-md transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                              {item.name && !predefinedNames.has(item.name) && !otherCatalogProducts.some(p => p.name === item.name) && (
+                                <optgroup label="✏️ صنف مسجل">
+                                  <option value={item.name}>{item.name}</option>
+                                </optgroup>
+                              )}
+
+                              <option value="__CUSTOM__">✏️ صنف يدوي آخر (كتابة مخصصة)...</option>
+                            </select>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Unit */}
+                      <td className="py-2 px-3">
+                        <select
+                          value={item.unit}
+                          onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
+                          className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-hidden"
+                        >
+                          <option value="كرتونة">كرتونة</option>
+                          <option value="عبوة">عبوة</option>
+                          <option value="لتر">لتر</option>
+                          <option value="قطعة">قطعة</option>
+                          <option value="كيلو">كيلو</option>
+                        </select>
+                      </td>
+
+                      {/* Quantity */}
+                      <td className="py-2 px-3">
+                        <input
+                          type="number"
+                          min="0.1"
+                          step="any"
+                          required
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                          className="w-full px-2.5 py-1.5 text-sm font-semibold bg-white border border-slate-200 rounded-md focus:outline-hidden text-center"
+                        />
+                      </td>
+
+                      {/* Unit Price */}
+                      <td className="py-2 px-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          required
+                          value={item.unitPrice}
+                          onChange={(e) => handleItemChange(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          className="w-full px-2.5 py-1.5 text-sm font-semibold bg-white border border-slate-200 rounded-md focus:outline-hidden text-center"
+                        />
+                      </td>
+
+                      {/* Line Total */}
+                      <td className="py-2 px-3 font-bold text-slate-900 whitespace-nowrap">
+                        {item.total.toLocaleString()} ج.م
+                      </td>
+
+                      {/* Remove */}
+                      <td className="py-2 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded-md transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-
-            <datalist id="catalog-products-list">
-              {productCatalog.map(prod => (
-                <option key={prod.id} value={prod.name}>
-                  {prod.name} - {prod.defaultPrice} ج.م / {prod.unit}
-                </option>
-              ))}
-            </datalist>
           </div>
         </div>
 
-        {/* Section 3: Summary, Tax, Discount & Payment */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200">
+        {/* Section 3: Summary & Financial Adjustments */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           
-          {/* Notes & Extra info */}
-          <div className="space-y-3">
-            <label className="block text-xs font-bold text-slate-700">ملاحظات الفاتورة أو شروط الدفع</label>
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">ملاحظات الفاتورة أو شروط الدفع</label>
             <textarea
               rows={4}
-              placeholder="أدخل أي ملاحظات خاصة بالفاتورة، طريقة السداد، أو تفاصيل المندوب..."
+              placeholder="مثال: تسليم مخزن أكتوبر، متبقي الشيك بعد أسبوعين..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
             />
-
-            {/* Payment Quick Presets */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">أزرار سداد سريعة</label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPaidAmount(totalAmount)}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-colors cursor-pointer"
-                >
-                  خالص بالكامل ({totalAmount.toLocaleString()} ج)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaidAmount(0)}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-md bg-rose-100 text-rose-800 hover:bg-rose-200 transition-colors cursor-pointer"
-                >
-                  غير مسدد (أجل 0 ج)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaidAmount(Number((totalAmount / 2).toFixed(2)))}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors cursor-pointer"
-                >
-                  سداد النصف (50%)
-                </button>
-              </div>
-            </div>
           </div>
 
-          {/* Calculations Breakdown */}
-          <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200">
+          {/* Totals & Calculations */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
             
             {/* Subtotal */}
             <div className="flex items-center justify-between text-sm">
@@ -462,41 +539,38 @@ function InvoiceModalContent({
               <span className="font-bold text-slate-900">{subtotal.toLocaleString()} ج.م</span>
             </div>
 
-            {/* Tax */}
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-600">الضريبة (% أو قيمة):</span>
+            {/* Tax toggle */}
+            <div className="flex items-center justify-between gap-2 text-xs pt-1 border-t border-slate-200">
+              <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-semibold">
                 <input
-                  type="number"
-                  min="0"
-                  placeholder="نسبة %"
-                  value={taxRate || ''}
-                  onChange={(e) => {
-                    const rate = parseFloat(e.target.value) || 0;
-                    setTaxRate(rate);
-                    if (rate > 0) {
-                      setTaxAmount(Number(((subtotal * rate) / 100).toFixed(2)));
-                    }
-                  }}
-                  className="w-16 px-1.5 py-0.5 text-xs text-center border border-slate-200 rounded-md"
+                  type="checkbox"
+                  checked={enableTax}
+                  onChange={(e) => setEnableTax(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500"
                 />
-                <span className="text-xs text-slate-400">%</span>
-              </div>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={taxAmount}
-                onChange={(e) => {
-                  setTaxAmount(parseFloat(e.target.value) || 0);
-                  setTaxRate(0);
-                }}
-                className="w-24 px-2 py-1 text-xs font-semibold text-left border border-slate-200 rounded-md"
-              />
+                <Percent className="w-3.5 h-3.5 text-slate-500" />
+                <span>إضافة ضريبة القيمة المضافة:</span>
+              </label>
+
+              {enableTax && (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                    className="w-16 px-2 py-1 text-xs text-center border border-slate-200 rounded-md"
+                  />
+                  <span>%</span>
+                  <span className="text-slate-500 text-[11px]">({calculatedTax.toLocaleString()} ج.م)</span>
+                </div>
+              )}
             </div>
 
             {/* Discount */}
-            <div className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600">الخصم المالي:</span>
               <input
                 type="number"
