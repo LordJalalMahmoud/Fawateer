@@ -3,11 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny all
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Helper functions
     function isSignedIn() {
       return request.auth != null;
@@ -16,8 +11,22 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.email == 'jalalmahmoud8000@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true))
       );
+    }
+
+    // Default rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin() || request.auth.token.email == 'jalalmahmoud8000@gmail.com');
     }
 
     // Admin profiles collection
@@ -28,12 +37,12 @@ service cloud.firestore {
 
     // Invoices collection
     match /invoices/{invoiceId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() || isSignedIn();
     }
 
     // Products catalog
     match /products/{productId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() || isSignedIn();
     }
 
     // System ping/test connection

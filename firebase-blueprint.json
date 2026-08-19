@@ -1,5 +1,19 @@
 {
   "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in Firestore",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
     "Invoice": {
       "title": "Invoice",
       "description": "Invoice record for customer transactions",
@@ -54,6 +68,10 @@
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles collection"
+    },
     "/invoices/{invoiceId}": {
       "schema": "Invoice",
       "description": "Invoices collection accessible to admins"

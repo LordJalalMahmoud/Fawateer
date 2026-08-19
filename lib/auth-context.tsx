@@ -22,6 +22,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  projectId: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const projectId = 'goldclean-48343';
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -40,31 +42,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userEmail = (currentUser.email || '').toLowerCase().trim();
           const isSuperAdminEmail = SUPER_ADMIN_EMAILS.some(e => e.toLowerCase() === userEmail);
 
-          // Check admin collection in Firestore
-          let isDocAdmin = false;
+          let hasAdminRole = isSuperAdminEmail;
+
+          // 1. Check in 'admins' collection
           try {
             const adminDocRef = doc(db, 'admins', currentUser.uid);
             const adminSnap = await getDoc(adminDocRef);
-            if (adminSnap.exists() && adminSnap.data()?.role === 'admin') {
-              isDocAdmin = true;
+            if (adminSnap.exists()) {
+              const data = adminSnap.data();
+              if (data?.role === 'admin' || data?.isAdmin === true) {
+                hasAdminRole = true;
+              }
             } else if (isSuperAdminEmail) {
-              // Auto-seed admin document for super admin
               await setDoc(adminDocRef, {
                 uid: currentUser.uid,
                 email: currentUser.email,
                 displayName: currentUser.displayName || 'المدير العام',
                 role: 'admin',
+                isAdmin: true,
                 createdAt: new Date().toISOString(),
               }, { merge: true });
-              isDocAdmin = true;
+              hasAdminRole = true;
             }
           } catch (err) {
-            console.warn('Admin check error in Firestore, evaluating email rule:', err);
+            console.warn('Admin check error:', err);
           }
 
-          setIsAdmin(isSuperAdminEmail || isDocAdmin);
+          // 2. Check in 'users' collection
+          try {
+            const userDocRef = doc(db, 'users', currentUser.uid);
+            const userSnap = await getDoc(userDocRef);
+            if (userSnap.exists()) {
+              const data = userSnap.data();
+              if (data?.role === 'admin' || data?.isAdmin === true || isSuperAdminEmail) {
+                hasAdminRole = true;
+              }
+            } else {
+              // Register user in users collection
+              await setDoc(userDocRef, {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                displayName: currentUser.displayName || 'مستخدم',
+                photoURL: currentUser.photoURL || null,
+                role: isSuperAdminEmail ? 'admin' : 'user',
+                isAdmin: isSuperAdminEmail,
+                lastLoginAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+              }, { merge: true });
+            }
+          } catch (err) {
+            console.warn('User document sync error:', err);
+          }
+
+          setIsAdmin(hasAdminRole);
         } catch (err: any) {
-          console.error('Error verifying admin permissions:', err);
+          console.error('Error verifying user permissions:', err);
           setIsAdmin(false);
         }
       } else {
@@ -110,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginWithGoogle,
         logout,
         clearError: () => setAuthError(null),
+        projectId,
       }}
     >
       {children}

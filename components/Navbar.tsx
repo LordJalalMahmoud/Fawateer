@@ -9,7 +9,8 @@ import {
   RotateCcw,
   ReceiptText,
   ShieldCheck,
-  LogOut
+  LogOut,
+  Database
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -30,7 +31,7 @@ export function Navbar({
   onClearData,
   invoicesCount,
 }: NavbarProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, projectId } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs no-print">
@@ -50,9 +51,10 @@ export function Navbar({
                 <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                   {invoicesCount} فاتورة
                 </span>
-                <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                  <ShieldCheck className="w-3 h-3 text-blue-600" />
-                  <span>سحابي (Firebase)</span>
+                <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs" title={`متصل بمشروع Firebase: ${projectId}`}>
+                  <Database className="w-3 h-3 text-emerald-600" />
+                  <span className="font-mono">{projectId}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 </span>
               </div>
               <p className="text-xs text-slate-500 hidden sm:block">
