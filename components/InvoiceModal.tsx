@@ -53,7 +53,7 @@ function InvoiceModalContent({
     initialInvoice ? initialInvoice.invoiceNumber : `INV-${currentYear}-${String(nextNum).padStart(3, '0')}`
   );
   const [date, setDate] = useState(
-    initialInvoice ? initialInvoice.date : '2026-08-18'
+    initialInvoice ? initialInvoice.date : new Date().toISOString().slice(0, 10)
   );
   const [customerName, setCustomerName] = useState(
     initialInvoice ? initialInvoice.customerName : ''
@@ -153,25 +153,28 @@ function InvoiceModalContent({
       return;
     }
 
+    const timestamp = initialInvoice ? initialInvoice.createdAt : '2026-08-19T05:58:00.000Z';
+    const nowIso = initialInvoice ? '2026-08-19T05:58:00.000Z' : timestamp;
+
     const savedInvoice: Invoice = {
       id: initialInvoice ? initialInvoice.id : generateUniqueId('inv'),
-      invoiceNumber: invoiceNumber.trim() || generateUniqueId('INV'),
-      date: date || '2026-08-18',
+      invoiceNumber: invoiceNumber.trim() || `INV-${existingInvoices.length + 1}`,
+      date: date || '2026-08-19',
       customerName: customerName.trim(),
-      customerPhone: customerPhone.trim() || undefined,
-      customerAddress: customerAddress.trim() || undefined,
+      customerPhone: customerPhone.trim() || '',
+      customerAddress: customerAddress.trim() || '',
       items: validItems,
       subtotal,
-      taxRate: taxRate > 0 ? taxRate : undefined,
+      taxRate: taxRate > 0 ? taxRate : 0,
       taxAmount: calculatedTax,
       discount: Number(discount) || 0,
       totalAmount,
       paidAmount: Number(paidAmount) || 0,
       remainingAmount,
       status,
-      notes: notes.trim() || undefined,
-      createdAt: initialInvoice ? initialInvoice.createdAt : '2026-08-18',
-      updatedAt: '2026-08-18',
+      notes: notes.trim() || '',
+      createdAt: timestamp,
+      updatedAt: nowIso,
     };
 
     onSave(savedInvoice);

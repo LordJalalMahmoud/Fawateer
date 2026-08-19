@@ -15,7 +15,8 @@ import {
   subscribeToProducts, 
   saveInvoiceToFirestore, 
   deleteInvoiceFromFirestore, 
-  saveProductsToFirestore 
+  saveProductsToFirestore,
+  testFirestoreDirectWrite
 } from '@/lib/firestore-service';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { AuthGate } from '@/components/AuthGate';
@@ -27,14 +28,24 @@ import { InvoiceViewModal } from '@/components/InvoiceViewModal';
 import { CustomerLedgerModal } from '@/components/CustomerLedgerModal';
 import { ProductCatalogModal } from '@/components/ProductCatalogModal';
 import { PaymentDrawer } from '@/components/PaymentDrawer';
-import { FilePlus, Check, Package, Users } from 'lucide-react';
+import { FilePlus, Check, Package, Users, CheckCircle2, AlertCircle, RefreshCw, Database } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 function InvoicesDashboard() {
-  const { user } = useAuth();
+  const { user, projectId } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>(() => getStoredInvoices());
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => getStoredProducts());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
+
+  // Toast / Alert Notification State
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 5000);
+  };
 
   // Real-time Firestore sync
   useEffect(() => {
@@ -46,7 +57,8 @@ function InvoicesDashboard() {
         saveStoredInvoices(remoteInvoices || []);
         setSyncStatus('synced');
       },
-      () => {
+      (err) => {
+        console.warn('Invoices sync issue:', err);
         setSyncStatus('local');
       }
     );
@@ -56,7 +68,8 @@ function InvoicesDashboard() {
         setProducts(remoteProducts || []);
         saveStoredProducts(remoteProducts || []);
       },
-      () => {
+      (err) => {
+        console.warn('Products sync issue:', err);
         setSyncStatus('local');
       }
     );
@@ -83,6 +96,8 @@ function InvoicesDashboard() {
   const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
 
+  const [testingFirebase, setTestingFirebase] = useState(false);
+
   // Synchronous local + asynchronous Firestore update
   const updateInvoices = (newInvoices: Invoice[]) => {
     setInvoices(newInvoices);
@@ -94,8 +109,10 @@ function InvoicesDashboard() {
     saveStoredProducts(newProducts);
     try {
       await saveProductsToFirestore(newProducts);
-    } catch (e) {
+      showToast('تم حفظ وتحديث قائمة المنتجات في Firebase بنجاح', 'success');
+    } catch (e: any) {
       console.warn('Firestore product update error, saved locally:', e);
+      showToast(`تنبيه: حُفظت المنتجات محلياً فقط (${e?.message || 'تعذر الاتصال بـ Firebase'})`, 'error');
     }
   };
 
@@ -133,8 +150,10 @@ function InvoicesDashboard() {
     updateInvoices(updated);
     try {
       await saveInvoiceToFirestore(duplicated);
-    } catch (e) {
+      showToast(`تم تكرار الفاتورة وحفظها في Firebase (${duplicated.invoiceNumber})`, 'success');
+    } catch (e: any) {
       console.warn('Firestore duplicate save error:', e);
+      showToast(`حفظت الفاتورة محلياً (${e?.message || 'خطأ اتصال'})`, 'error');
     }
     setViewingInvoice(duplicated);
     setIsViewModalOpen(true);
@@ -145,8 +164,10 @@ function InvoicesDashboard() {
     updateInvoices(updated);
     try {
       await deleteInvoiceFromFirestore(invoiceId);
-    } catch (e) {
+      showToast('تم حذف الفاتورة بنجاح من قاعدة البيانات', 'info');
+    } catch (e: any) {
       console.warn('Firestore delete error:', e);
+      showToast('حذفت الفاتورة محلياً', 'info');
     }
   };
 
@@ -164,8 +185,10 @@ function InvoicesDashboard() {
     
     try {
       await saveInvoiceToFirestore(savedInvoice);
-    } catch (e) {
-      console.warn('Firestore invoice save error, kept in local state:', e);
+      showToast(`تم حفظ الفاتورة (${savedInvoice.invoiceNumber}) بنجاح في Firebase Firestore!`, 'success');
+    } catch (e: any) {
+      console.error('Firestore invoice save error:', e);
+      showToast(`تنبيه: تم الحفظ في المتصفح فقط. تفاصيل خطأ Firebase: ${e?.message || e}`, 'error');
     }
 
     setIsInvoiceModalOpen(false);
@@ -209,8 +232,10 @@ function InvoicesDashboard() {
     if (updatedInvoice) {
       try {
         await saveInvoiceToFirestore(updatedInvoice);
-      } catch (e) {
+        showToast('تم تسجيل الدفعة وتحديث الفاتورة في Firebase سحابياً', 'success');
+      } catch (e: any) {
         console.warn('Firestore payment update error:', e);
+        showToast('تم تسجيل الدفعة محلياً', 'info');
       }
     }
   };
@@ -222,6 +247,7 @@ function InvoicesDashboard() {
       }
       resetToEmptyData();
       setInvoices([]);
+      showToast('تم تفريغ كافة الفواتير بنجاح', 'info');
     }
   };
 
@@ -229,9 +255,49 @@ function InvoicesDashboard() {
     exportInvoicesToCSV(invoices);
   };
 
+  const handleTestFirebaseConnection = async () => {
+    setTestingFirebase(true);
+    try {
+      const res = await testFirestoreDirectWrite();
+      if (res.success) {
+        showToast(`✅ ${res.message} (مشروع: ${projectId})`, 'success');
+      } else {
+        showToast(`❌ ${res.message}: ${res.error}`, 'error');
+      }
+    } catch (e: any) {
+      showToast(`❌ خطأ اختبار الاتصال: ${e?.message || e}`, 'error');
+    } finally {
+      setTestingFirebase(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50/80 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
       
+      {/* Toast Alert Banner */}
+      {toast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom duration-300 max-w-lg w-[90%] sm:w-auto">
+          <div className={`p-4 rounded-2xl shadow-2xl flex items-center gap-3 border text-sm font-semibold ${
+            toast.type === 'success' 
+              ? 'bg-emerald-900 text-emerald-100 border-emerald-700 shadow-emerald-950/40' 
+              : toast.type === 'error'
+              ? 'bg-rose-900 text-rose-100 border-rose-700 shadow-rose-950/40'
+              : 'bg-slate-900 text-slate-100 border-slate-700 shadow-slate-950/40'
+          }`}>
+            {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />}
+            {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />}
+            {toast.type === 'info' && <Database className="w-5 h-5 text-teal-400 shrink-0" />}
+            <span className="flex-1 leading-snug">{toast.message}</span>
+            <button 
+              onClick={() => setToast(null)}
+              className="text-xs text-slate-400 hover:text-white cursor-pointer px-1 py-0.5"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <Navbar
         onNewInvoice={handleNewInvoice}
@@ -253,6 +319,10 @@ function InvoicesDashboard() {
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
           <div className="space-y-1.5 z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/80 border border-emerald-800/80 text-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>مشروع Firebase النشط: <strong className="font-mono text-white">{projectId}</strong></span>
+            </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight">
               لوحة إدارة الفواتير والمبيعات السحابية
             </h2>
@@ -263,6 +333,19 @@ function InvoicesDashboard() {
 
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5 z-10 w-full md:w-auto">
+            
+            {/* Test Write to Firebase */}
+            <button
+              type="button"
+              onClick={handleTestFirebaseConnection}
+              disabled={testingFirebase}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-emerald-300 bg-emerald-950/70 hover:bg-emerald-900/80 rounded-xl border border-emerald-800/70 shadow-xs transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+              title="اختبار كتابة مستند تجريبي في Firestore للتحقق من الاتصال والصلاحيات"
+            >
+              <RefreshCw className={`w-4 h-4 ${testingFirebase ? 'animate-spin' : ''}`} />
+              <span>{testingFirebase ? 'جارِ الاختبار...' : 'فحص الاتصال بـ Firebase'}</span>
+            </button>
+
             <button
               onClick={() => setIsProductCatalogOpen(true)}
               className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer whitespace-nowrap"
@@ -270,6 +353,7 @@ function InvoicesDashboard() {
               <Package className="w-4 h-4 text-emerald-400" />
               <span>دليل المنتجات</span>
             </button>
+
             <button
               onClick={() => setIsCustomerLedgerOpen(true)}
               className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer whitespace-nowrap"
@@ -277,6 +361,7 @@ function InvoicesDashboard() {
               <Users className="w-4 h-4 text-teal-400" />
               <span>كشف الحسابات</span>
             </button>
+
             <button
               onClick={handleNewInvoice}
               className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-md shadow-emerald-600/30 transition-all cursor-pointer whitespace-nowrap"
@@ -316,7 +401,7 @@ function InvoicesDashboard() {
             <span>منظومة إدارة الفواتير والمبيعات وحسابات العملاء • متصل سحابياً</span>
             <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
               <Check className="w-3 h-3 text-emerald-600" />
-              {syncStatus === 'synced' ? 'متزامن لحظياً' : syncStatus === 'syncing' ? 'جارِ المزامنة...' : 'يعمل محلياً'}
+              {syncStatus === 'synced' ? 'متزامن لحظياً مع Firestore' : syncStatus === 'syncing' ? 'جارِ المزامنة...' : 'يعمل محلياً'}
             </span>
           </div>
           <div className="flex items-center gap-4">
