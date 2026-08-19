@@ -10,7 +10,8 @@ import {
   ReceiptText,
   ShieldCheck,
   LogOut,
-  Database
+  Database,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -18,6 +19,7 @@ interface NavbarProps {
   onNewInvoice: () => void;
   onOpenCustomerLedger: () => void;
   onOpenCatalog: () => void;
+  onOpenTeamManagement: () => void;
   onExportCSV: () => void;
   onClearData: () => void;
   invoicesCount: number;
@@ -27,6 +29,7 @@ export function Navbar({
   onNewInvoice,
   onOpenCustomerLedger,
   onOpenCatalog,
+  onOpenTeamManagement,
   onExportCSV,
   onClearData,
   invoicesCount,
@@ -66,6 +69,16 @@ export function Navbar({
           {/* Action Buttons */}
           <div className="flex items-center gap-2 sm:gap-2.5">
             
+            {/* Team / Admins Management */}
+            <button
+              onClick={onOpenTeamManagement}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors cursor-pointer"
+              title="إدارة الحسابات والمدراء المصرح لهم بالتعديل"
+            >
+              <UserCheck className="w-4 h-4 text-teal-700" />
+              <span className="hidden md:inline">المدراء المصرح لهم</span>
+            </button>
+
             {/* Catalog */}
             <button
               onClick={onOpenCatalog}

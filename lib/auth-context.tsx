@@ -44,7 +44,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           let hasAdminRole = isSuperAdminEmail;
 
-          // 1. Check in 'admins' collection
+          // 1. Check authorized_admins document in 'system' collection
+          try {
+            const systemAdminsRef = doc(db, 'system', 'authorized_admins');
+            const systemSnap = await getDoc(systemAdminsRef);
+            if (systemSnap.exists()) {
+              const emails: string[] = systemSnap.data()?.emails || [];
+              if (emails.some(e => e.toLowerCase().trim() === userEmail)) {
+                hasAdminRole = true;
+              }
+            } else if (isSuperAdminEmail) {
+              await setDoc(systemAdminsRef, {
+                emails: SUPER_ADMIN_EMAILS,
+                createdAt: new Date().toISOString(),
+              }, { merge: true });
+            }
+          } catch (err) {
+            console.warn('System admins check error:', err);
+          }
+
+          // 2. Check in 'admins' collection
           try {
             const adminDocRef = doc(db, 'admins', currentUser.uid);
             const adminSnap = await getDoc(adminDocRef);
@@ -53,43 +72,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (data?.role === 'admin' || data?.isAdmin === true) {
                 hasAdminRole = true;
               }
-            } else if (isSuperAdminEmail) {
+            } else if (hasAdminRole) {
               await setDoc(adminDocRef, {
                 uid: currentUser.uid,
                 email: currentUser.email,
-                displayName: currentUser.displayName || 'المدير العام',
+                displayName: currentUser.displayName || 'مدير',
                 role: 'admin',
                 isAdmin: true,
                 createdAt: new Date().toISOString(),
               }, { merge: true });
-              hasAdminRole = true;
             }
           } catch (err) {
-            console.warn('Admin check error:', err);
+            console.warn('Admin collection check error:', err);
           }
 
-          // 2. Check in 'users' collection
+          // 3. Check / update in 'users' collection
           try {
             const userDocRef = doc(db, 'users', currentUser.uid);
             const userSnap = await getDoc(userDocRef);
             if (userSnap.exists()) {
               const data = userSnap.data();
-              if (data?.role === 'admin' || data?.isAdmin === true || isSuperAdminEmail) {
+              if (data?.role === 'admin' || data?.role === 'manager' || data?.isAdmin === true) {
                 hasAdminRole = true;
               }
-            } else {
-              // Register user in users collection
-              await setDoc(userDocRef, {
-                uid: currentUser.uid,
-                email: currentUser.email,
-                displayName: currentUser.displayName || 'مستخدم',
-                photoURL: currentUser.photoURL || null,
-                role: isSuperAdminEmail ? 'admin' : 'user',
-                isAdmin: isSuperAdminEmail,
-                lastLoginAt: new Date().toISOString(),
-                createdAt: new Date().toISOString(),
-              }, { merge: true });
             }
+            
+            // Sync user profile to users collection
+            await setDoc(userDocRef, {
+              uid: currentUser.uid,
+              email: currentUser.email,
+              displayName: currentUser.displayName || 'مستخدم',
+              photoURL: currentUser.photoURL || null,
+              role: hasAdminRole ? 'admin' : 'user',
+              isAdmin: hasAdminRole,
+              lastLoginAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+            }, { merge: true });
           } catch (err) {
             console.warn('User document sync error:', err);
           }

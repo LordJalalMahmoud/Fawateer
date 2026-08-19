@@ -27,8 +27,9 @@ import { InvoiceModal } from '@/components/InvoiceModal';
 import { InvoiceViewModal } from '@/components/InvoiceViewModal';
 import { CustomerLedgerModal } from '@/components/CustomerLedgerModal';
 import { ProductCatalogModal } from '@/components/ProductCatalogModal';
+import { TeamManagementModal } from '@/components/TeamManagementModal';
 import { PaymentDrawer } from '@/components/PaymentDrawer';
-import { FilePlus, Check, Package, Users, CheckCircle2, AlertCircle, RefreshCw, Database } from 'lucide-react';
+import { FilePlus, Check, Package, Users, CheckCircle2, AlertCircle, RefreshCw, Database, UserCheck } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 function InvoicesDashboard() {
@@ -92,6 +93,7 @@ function InvoicesDashboard() {
 
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState(false);
   const [isProductCatalogOpen, setIsProductCatalogOpen] = useState(false);
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
 
   const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
@@ -303,6 +305,7 @@ function InvoicesDashboard() {
         onNewInvoice={handleNewInvoice}
         onOpenCustomerLedger={() => setIsCustomerLedgerOpen(true)}
         onOpenCatalog={() => setIsProductCatalogOpen(true)}
+        onOpenTeamManagement={() => setIsTeamModalOpen(true)}
         onExportCSV={handleExportCSV}
         onClearData={handleClearAllData}
         invoicesCount={invoices.length}
@@ -344,6 +347,15 @@ function InvoicesDashboard() {
             >
               <RefreshCw className={`w-4 h-4 ${testingFirebase ? 'animate-spin' : ''}`} />
               <span>{testingFirebase ? 'جارِ الاختبار...' : 'فحص الاتصال بـ Firebase'}</span>
+            </button>
+
+            {/* Team Management */}
+            <button
+              onClick={() => setIsTeamModalOpen(true)}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-teal-300 bg-teal-950/70 hover:bg-teal-900/80 rounded-xl border border-teal-800/70 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+            >
+              <UserCheck className="w-4 h-4 text-teal-400" />
+              <span>المدراء المصرح لهم</span>
             </button>
 
             <button
@@ -405,6 +417,13 @@ function InvoicesDashboard() {
             </span>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsTeamModalOpen(true)}
+              className="text-teal-700 hover:underline cursor-pointer"
+            >
+              المدراء المصرح لهم
+            </button>
+            <span>•</span>
             <button
               onClick={() => setIsCustomerLedgerOpen(true)}
               className="text-teal-700 hover:underline cursor-pointer"
@@ -470,7 +489,13 @@ function InvoicesDashboard() {
         onSaveProducts={updateProducts}
       />
 
-      {/* 5. Quick Payment Collection Drawer */}
+      {/* 5. Team / Admins Management Modal */}
+      <TeamManagementModal
+        isOpen={isTeamModalOpen}
+        onClose={() => setIsTeamModalOpen(false)}
+      />
+
+      {/* 6. Quick Payment Collection Drawer */}
       <PaymentDrawer
         isOpen={isPaymentDrawerOpen}
         onClose={() => {
