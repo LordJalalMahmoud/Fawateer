@@ -83,15 +83,29 @@ export interface ItemProfitCalculation {
   companyUnitPrice: number;
   factoryUnitPrice: number;
   
-  // Total amounts
+  // Total invoiced amounts
   merchantRevenueTotal: number; // Q * merchantUnitPrice
   companyCostTotal: number;     // Q * companyUnitPrice
   factoryCostTotal: number;     // Q * factoryUnitPrice
   
-  // Profits
+  // Invoiced Profits
   companyProfitTotal: number;   // Q * (merchantUnitPrice - companyUnitPrice)
   factoryToCompanyProfitTotal: number; // Q * (companyUnitPrice - factoryUnitPrice)
   totalProfit: number;          // Q * (merchantUnitPrice - factoryUnitPrice)
+
+  // Realized / Collected portions (based on invoice paid ratio)
+  paidRatio: number;
+  realizedMerchantRevenue: number;
+  realizedCompanyCost: number;
+  realizedFactoryCost: number;
+  realizedCompanyProfit: number;
+  realizedFactoryToCompanyProfit: number;
+  realizedTotalProfit: number;
+
+  // Pending / Unrealized portions
+  pendingTotalProfit: number;
+  pendingCompanyProfit: number;
+  pendingFactoryProfit: number;
 }
 
 export interface InvoiceProfitBreakdown {
@@ -100,10 +114,32 @@ export interface InvoiceProfitBreakdown {
   date: string;
   customerName: string;
   items: ItemProfitCalculation[];
+  
+  // Invoiced amounts
   invoiceMerchantRevenue: number;
   invoiceCompanyCost: number;
   invoiceFactoryCost: number;
   invoiceCompanyProfit: number;
   invoiceFactoryToCompanyProfit: number;
   invoiceTotalProfit: number;
+
+  // Payment status & Realized Cash
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paidRatio: number; // 0 to 1
+  paymentStatus: PaymentStatus;
+
+  // Realized Profits (from collected cash)
+  realizedMerchantRevenue: number;
+  realizedCompanyCost: number;
+  realizedFactoryCost: number;
+  realizedCompanyProfit: number;
+  realizedFactoryToCompanyProfit: number;
+  realizedTotalProfit: number;
+
+  // Pending Profits (uncollected debt in market)
+  pendingTotalProfit: number;
+  pendingCompanyProfit: number;
+  pendingFactoryProfit: number;
 }

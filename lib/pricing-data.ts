@@ -147,7 +147,11 @@ export function findPricingTier(productName: string, tiers: ProductPricingTier[]
 /**
  * Calculate item profit breakdown based on pricing tiers
  */
-export function calculateItemProfit(item: InvoiceItem, tiers: ProductPricingTier[]): ItemProfitCalculation {
+export function calculateItemProfit(
+  item: InvoiceItem, 
+  tiers: ProductPricingTier[], 
+  paidRatio: number = 1
+): ItemProfitCalculation {
   const tier = findPricingTier(item.name, tiers);
   const qty = Number(item.quantity) || 0;
   const merchantUnitPrice = Number(item.unitPrice) || 0;
@@ -160,10 +164,24 @@ export function calculateItemProfit(item: InvoiceItem, tiers: ProductPricingTier
   const companyCostTotal = Number((qty * companyUnitPrice).toFixed(2));
   const factoryCostTotal = Number((qty * factoryUnitPrice).toFixed(2));
 
-  // Profits
+  // Invoiced Profits
   const companyProfitTotal = Number((merchantRevenueTotal - companyCostTotal).toFixed(2));
   const factoryToCompanyProfitTotal = Number((companyCostTotal - factoryCostTotal).toFixed(2));
   const totalProfit = Number((merchantRevenueTotal - factoryCostTotal).toFixed(2));
+
+  // Realized portions (proportional to collected payment ratio)
+  const safeRatio = Math.max(0, Math.min(1, paidRatio));
+  const realizedMerchantRevenue = Number((merchantRevenueTotal * safeRatio).toFixed(2));
+  const realizedCompanyCost = Number((companyCostTotal * safeRatio).toFixed(2));
+  const realizedFactoryCost = Number((factoryCostTotal * safeRatio).toFixed(2));
+  const realizedCompanyProfit = Number((companyProfitTotal * safeRatio).toFixed(2));
+  const realizedFactoryToCompanyProfit = Number((factoryToCompanyProfitTotal * safeRatio).toFixed(2));
+  const realizedTotalProfit = Number((totalProfit * safeRatio).toFixed(2));
+
+  // Pending / Unrealized portions
+  const pendingTotalProfit = Number((totalProfit - realizedTotalProfit).toFixed(2));
+  const pendingCompanyProfit = Number((companyProfitTotal - realizedCompanyProfit).toFixed(2));
+  const pendingFactoryProfit = Number((factoryToCompanyProfitTotal - realizedFactoryToCompanyProfit).toFixed(2));
 
   return {
     itemId: item.id,
@@ -179,6 +197,16 @@ export function calculateItemProfit(item: InvoiceItem, tiers: ProductPricingTier
     companyProfitTotal,
     factoryToCompanyProfitTotal,
     totalProfit,
+    paidRatio: safeRatio,
+    realizedMerchantRevenue,
+    realizedCompanyCost,
+    realizedFactoryCost,
+    realizedCompanyProfit,
+    realizedFactoryToCompanyProfit,
+    realizedTotalProfit,
+    pendingTotalProfit,
+    pendingCompanyProfit,
+    pendingFactoryProfit,
   };
 }
 
@@ -186,15 +214,39 @@ export function calculateItemProfit(item: InvoiceItem, tiers: ProductPricingTier
  * Calculate invoice profit breakdown
  */
 export function calculateInvoiceProfit(invoice: Invoice, tiers: ProductPricingTier[]): InvoiceProfitBreakdown {
-  const itemsProfit = (invoice.items || []).map(it => calculateItemProfit(it, tiers));
+  const totalAmount = Number(invoice.totalAmount) || 0;
+  const paidAmount = Number(invoice.paidAmount) || 0;
+  const remainingAmount = Number(invoice.remainingAmount ?? Math.max(0, totalAmount - paidAmount)) || 0;
+  
+  let paidRatio = 0;
+  if (totalAmount > 0) {
+    paidRatio = Math.min(1, Math.max(0, paidAmount / totalAmount));
+  } else if (paidAmount > 0) {
+    paidRatio = 1;
+  }
 
-  const invoiceMerchantRevenue = itemsProfit.reduce((sum, it) => sum + it.merchantRevenueTotal, 0);
-  const invoiceCompanyCost = itemsProfit.reduce((sum, it) => sum + it.companyCostTotal, 0);
-  const invoiceFactoryCost = itemsProfit.reduce((sum, it) => sum + it.factoryCostTotal, 0);
+  const itemsProfit = (invoice.items || []).map(it => calculateItemProfit(it, tiers, paidRatio));
+
+  const invoiceMerchantRevenue = Number(itemsProfit.reduce((sum, it) => sum + it.merchantRevenueTotal, 0).toFixed(2));
+  const invoiceCompanyCost = Number(itemsProfit.reduce((sum, it) => sum + it.companyCostTotal, 0).toFixed(2));
+  const invoiceFactoryCost = Number(itemsProfit.reduce((sum, it) => sum + it.factoryCostTotal, 0).toFixed(2));
 
   const invoiceCompanyProfit = Number((invoiceMerchantRevenue - invoiceCompanyCost).toFixed(2));
   const invoiceFactoryToCompanyProfit = Number((invoiceCompanyCost - invoiceFactoryCost).toFixed(2));
   const invoiceTotalProfit = Number((invoiceMerchantRevenue - invoiceFactoryCost).toFixed(2));
+
+  // Realized totals from collected payments
+  const realizedMerchantRevenue = Number(itemsProfit.reduce((sum, it) => sum + it.realizedMerchantRevenue, 0).toFixed(2));
+  const realizedCompanyCost = Number(itemsProfit.reduce((sum, it) => sum + it.realizedCompanyCost, 0).toFixed(2));
+  const realizedFactoryCost = Number(itemsProfit.reduce((sum, it) => sum + it.realizedFactoryCost, 0).toFixed(2));
+  const realizedCompanyProfit = Number(itemsProfit.reduce((sum, it) => sum + it.realizedCompanyProfit, 0).toFixed(2));
+  const realizedFactoryToCompanyProfit = Number(itemsProfit.reduce((sum, it) => sum + it.realizedFactoryToCompanyProfit, 0).toFixed(2));
+  const realizedTotalProfit = Number(itemsProfit.reduce((sum, it) => sum + it.realizedTotalProfit, 0).toFixed(2));
+
+  // Pending totals (remaining debt / pending profits)
+  const pendingTotalProfit = Number((invoiceTotalProfit - realizedTotalProfit).toFixed(2));
+  const pendingCompanyProfit = Number((invoiceCompanyProfit - realizedCompanyProfit).toFixed(2));
+  const pendingFactoryProfit = Number((invoiceFactoryToCompanyProfit - realizedFactoryToCompanyProfit).toFixed(2));
 
   return {
     invoiceId: invoice.id,
@@ -208,5 +260,19 @@ export function calculateInvoiceProfit(invoice: Invoice, tiers: ProductPricingTi
     invoiceCompanyProfit,
     invoiceFactoryToCompanyProfit,
     invoiceTotalProfit,
+    totalAmount,
+    paidAmount,
+    remainingAmount,
+    paidRatio,
+    paymentStatus: invoice.status || (remainingAmount <= 0.01 ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID'),
+    realizedMerchantRevenue,
+    realizedCompanyCost,
+    realizedFactoryCost,
+    realizedCompanyProfit,
+    realizedFactoryToCompanyProfit,
+    realizedTotalProfit,
+    pendingTotalProfit,
+    pendingCompanyProfit,
+    pendingFactoryProfit,
   };
 }
