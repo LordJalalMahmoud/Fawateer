@@ -7,13 +7,18 @@ import {
   query, 
   orderBy,
   writeBatch,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { Invoice, ProductCatalogItem } from './types';
+import { Invoice, ProductCatalogItem, ProductPricingTier, VaultSettings } from './types';
+import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
 const INVOICES_COLLECTION = 'invoices';
 const PRODUCTS_COLLECTION = 'products';
+const SETTINGS_COLLECTION = 'settings';
+const PRICING_TIERS_DOC = 'pricing_tiers';
+const VAULT_SETTINGS_DOC = 'vault_permissions';
 
 /**
  * Remove all `undefined` keys and prepare clean JSON object for Firestore
@@ -26,8 +31,6 @@ function cleanForFirestore<T>(data: T): Record<string, any> {
     return value;
   });
   const parsed = JSON.parse(json);
-  
-  // Recursively remove null/undefined keys if needed or keep clean types
   return parsed;
 }
 
@@ -113,6 +116,94 @@ export async function saveProductsToFirestore(products: ProductCatalogItem[]): P
     batch.set(docRef, cleanProd, { merge: true });
   }
   await batch.commit();
+}
+
+/**
+ * Real-time listener for Pricing Tiers (Factory and Company Prices) in Firestore
+ */
+export function subscribeToPricingTiers(
+  onData: (tiers: ProductPricingTier[]) => void,
+  onError?: (err: Error) => void
+) {
+  const docRef = doc(db, SETTINGS_COLLECTION, PRICING_TIERS_DOC);
+
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && Array.isArray(data.tiers)) {
+          onData(data.tiers);
+          return;
+        }
+      }
+      // If not yet created in Firestore, trigger with default
+      onData(DEFAULT_PRICING_TIERS);
+    },
+    (error) => {
+      console.warn('Firestore pricing tiers error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save Pricing Tiers to Firestore
+ */
+export async function savePricingTiersToFirestore(tiers: ProductPricingTier[]): Promise<void> {
+  const docRef = doc(db, SETTINGS_COLLECTION, PRICING_TIERS_DOC);
+  const cleanData = cleanForFirestore({
+    tiers,
+    updatedAt: new Date().toISOString(),
+  });
+  await setDoc(docRef, cleanData, { merge: true });
+}
+
+/**
+ * Real-time listener for Vault Permissions Settings in Firestore
+ */
+export function subscribeToVaultSettings(
+  onData: (settings: VaultSettings) => void,
+  onError?: (err: Error) => void
+) {
+  const docRef = doc(db, SETTINGS_COLLECTION, VAULT_SETTINGS_DOC);
+
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data) {
+          onData({
+            authorizedEmails: data.authorizedEmails || ['jalalmahmoud8000@gmail.com'],
+            securityPin: data.securityPin || '',
+            updatedAt: data.updatedAt,
+          });
+          return;
+        }
+      }
+      onData({
+        authorizedEmails: ['jalalmahmoud8000@gmail.com'],
+        securityPin: '',
+      });
+    },
+    (error) => {
+      console.warn('Firestore vault settings error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save Vault Settings to Firestore
+ */
+export async function saveVaultSettingsToFirestore(settings: VaultSettings): Promise<void> {
+  const docRef = doc(db, SETTINGS_COLLECTION, VAULT_SETTINGS_DOC);
+  const cleanData = cleanForFirestore({
+    ...settings,
+    updatedAt: new Date().toISOString(),
+  });
+  await setDoc(docRef, cleanData, { merge: true });
 }
 
 /**

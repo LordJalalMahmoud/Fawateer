@@ -1,8 +1,11 @@
-import { Invoice, ProductCatalogItem, CustomerBalance } from './types';
+import { Invoice, ProductCatalogItem, CustomerBalance, ProductPricingTier, VaultSettings } from './types';
 import { INITIAL_INVOICES, INITIAL_PRODUCTS } from './sample-data';
+import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
 const INVOICES_STORAGE_KEY = 'detergent_invoices_v1';
 const PRODUCTS_STORAGE_KEY = 'detergent_products_v1';
+const PRICING_TIERS_STORAGE_KEY = 'detergent_pricing_tiers_v1';
+const VAULT_SETTINGS_STORAGE_KEY = 'detergent_vault_settings_v1';
 
 export function getStoredInvoices(): Invoice[] {
   if (typeof window === 'undefined') return INITIAL_INVOICES;
@@ -49,6 +52,58 @@ export function saveStoredProducts(products: ProductCatalogItem[]): void {
     localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
   } catch (e) {
     console.error('Error saving products to localStorage', e);
+  }
+}
+
+export function getStoredPricingTiers(): ProductPricingTier[] {
+  if (typeof window === 'undefined') return DEFAULT_PRICING_TIERS;
+  try {
+    const raw = localStorage.getItem(PRICING_TIERS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(PRICING_TIERS_STORAGE_KEY, JSON.stringify(DEFAULT_PRICING_TIERS));
+      return DEFAULT_PRICING_TIERS;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading pricing tiers from localStorage', e);
+    return DEFAULT_PRICING_TIERS;
+  }
+}
+
+export function saveStoredPricingTiers(tiers: ProductPricingTier[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(PRICING_TIERS_STORAGE_KEY, JSON.stringify(tiers));
+  } catch (e) {
+    console.error('Error saving pricing tiers to localStorage', e);
+  }
+}
+
+export function getStoredVaultSettings(): VaultSettings {
+  const defaultSettings: VaultSettings = {
+    authorizedEmails: ['jalalmahmoud8000@gmail.com'],
+    securityPin: '',
+  };
+  if (typeof window === 'undefined') return defaultSettings;
+  try {
+    const raw = localStorage.getItem(VAULT_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(VAULT_SETTINGS_STORAGE_KEY, JSON.stringify(defaultSettings));
+      return defaultSettings;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading vault settings from localStorage', e);
+    return defaultSettings;
+  }
+}
+
+export function saveStoredVaultSettings(settings: VaultSettings): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(VAULT_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.error('Error saving vault settings to localStorage', e);
   }
 }
 

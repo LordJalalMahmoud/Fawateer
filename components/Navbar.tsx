@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   LogOut,
   Database,
-  UserCheck
+  UserCheck,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -20,6 +21,7 @@ interface NavbarProps {
   onOpenCustomerLedger: () => void;
   onOpenCatalog: () => void;
   onOpenTeamManagement: () => void;
+  onOpenSecretVault: () => void;
   onExportCSV: () => void;
   onClearData: () => void;
   invoicesCount: number;
@@ -30,6 +32,7 @@ export function Navbar({
   onOpenCustomerLedger,
   onOpenCatalog,
   onOpenTeamManagement,
+  onOpenSecretVault,
   onExportCSV,
   onClearData,
   invoicesCount,
@@ -69,20 +72,30 @@ export function Navbar({
           {/* Action Buttons */}
           <div className="flex items-center gap-2 sm:gap-2.5">
             
+            {/* Secret Profit Vault VIP Button */}
+            <button
+              onClick={onOpenSecretVault}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-amber-300 bg-slate-950 hover:bg-slate-900 border border-amber-500/40 rounded-xl transition-all shadow-sm hover:shadow-amber-500/10 cursor-pointer"
+              title="خزنة الأرباح السرية وهوامش التكلفة (وصول مخصص)"
+            >
+              <Lock className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">خزنة الأرباح</span>
+            </button>
+
             {/* Team / Admins Management */}
             <button
               onClick={onOpenTeamManagement}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer"
               title="إدارة الحسابات والمدراء المصرح لهم بالتعديل"
             >
               <UserCheck className="w-4 h-4 text-teal-700" />
-              <span className="hidden md:inline">المدراء المصرح لهم</span>
+              <span className="hidden md:inline">المدراء</span>
             </button>
 
             {/* Catalog */}
             <button
               onClick={onOpenCatalog}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
               title="دليل الأسعار والمنتجات"
             >
               <Package className="w-4 h-4 text-slate-600" />
@@ -92,17 +105,17 @@ export function Navbar({
             {/* Customers Ledger */}
             <button
               onClick={onOpenCustomerLedger}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
               title="كشف حسابات العملاء"
             >
               <Users className="w-4 h-4 text-teal-600" />
-              <span className="hidden md:inline">كشف حساب العملاء</span>
+              <span className="hidden md:inline">كشف الحسابات</span>
             </button>
 
             {/* Export CSV */}
             <button
               onClick={onExportCSV}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               title="تصدير ملف Excel / CSV"
             >
               <Download className="w-4 h-4" />
@@ -112,7 +125,7 @@ export function Navbar({
             {/* Clear All Invoices button */}
             <button
               onClick={onClearData}
-              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
               title="تفريغ ومسح كافة الفواتير"
             >
               <RotateCcw className="w-4 h-4" />
@@ -121,7 +134,7 @@ export function Navbar({
             {/* New Invoice Button */}
             <button
               onClick={onNewInvoice}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-lg shadow-sm shadow-emerald-600/30 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-sm shadow-emerald-600/30 transition-all cursor-pointer"
             >
               <FilePlus className="w-4 h-4" />
               <span>فاتورة جديدة</span>
@@ -141,7 +154,7 @@ export function Navbar({
                 </div>
                 <button
                   onClick={() => logout()}
-                  className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                  className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                   title="تسجيل الخروج"
                 >
                   <LogOut className="w-4 h-4" />

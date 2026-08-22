@@ -1,21 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Invoice, ProductCatalogItem, PaymentStatus } from '@/lib/types';
+import { Invoice, ProductCatalogItem, PaymentStatus, ProductPricingTier, VaultSettings } from '@/lib/types';
 import { 
   getStoredInvoices, 
   saveStoredInvoices, 
   getStoredProducts, 
   saveStoredProducts, 
+  getStoredPricingTiers,
+  saveStoredPricingTiers,
+  getStoredVaultSettings,
+  saveStoredVaultSettings,
   resetToEmptyData,
   exportInvoicesToCSV 
 } from '@/lib/storage';
 import { 
   subscribeToInvoices, 
   subscribeToProducts, 
+  subscribeToPricingTiers,
+  subscribeToVaultSettings,
   saveInvoiceToFirestore, 
   deleteInvoiceFromFirestore, 
   saveProductsToFirestore,
+  savePricingTiersToFirestore,
+  saveVaultSettingsToFirestore,
   testFirestoreDirectWrite
 } from '@/lib/firestore-service';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
@@ -34,6 +42,7 @@ import { MerchantStatementModal } from '@/components/MerchantStatementModal';
 import { AddMerchantGoodsModal } from '@/components/AddMerchantGoodsModal';
 import { AddMerchantPaymentModal } from '@/components/AddMerchantPaymentModal';
 import { NewMerchantModal } from '@/components/NewMerchantModal';
+import { SecretProfitVaultModal } from '@/components/SecretProfitVaultModal';
 import { 
   FilePlus, 
   Check, 
@@ -46,7 +55,9 @@ import {
   UserCheck,
   Building2,
   Receipt,
-  UserPlus
+  UserPlus,
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -54,6 +65,8 @@ function InvoicesDashboard() {
   const { user, projectId } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>(() => getStoredInvoices());
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => getStoredProducts());
+  const [pricingTiers, setPricingTiers] = useState<ProductPricingTier[]>(() => getStoredPricingTiers());
+  const [vaultSettings, setVaultSettings] = useState<VaultSettings>(() => getStoredVaultSettings());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
 
   // Main Dashboard View Mode: 'MERCHANTS' (حسابات التجار) vs 'INVOICES' (سجل الفواتير)
@@ -69,7 +82,7 @@ function InvoicesDashboard() {
     }, 5000);
   };
 
-  // Real-time Firestore sync
+  // Real-time Firestore sync for all collections
   useEffect(() => {
     if (!user) return;
 
@@ -96,9 +109,35 @@ function InvoicesDashboard() {
       }
     );
 
+    const unsubPricing = subscribeToPricingTiers(
+      (remoteTiers) => {
+        if (remoteTiers && remoteTiers.length > 0) {
+          setPricingTiers(remoteTiers);
+          saveStoredPricingTiers(remoteTiers);
+        }
+      },
+      (err) => {
+        console.warn('Pricing tiers sync issue:', err);
+      }
+    );
+
+    const unsubVault = subscribeToVaultSettings(
+      (remoteVault) => {
+        if (remoteVault) {
+          setVaultSettings(remoteVault);
+          saveStoredVaultSettings(remoteVault);
+        }
+      },
+      (err) => {
+        console.warn('Vault settings sync issue:', err);
+      }
+    );
+
     return () => {
       unsubInvoices();
       unsubProducts();
+      unsubPricing();
+      unsubVault();
     };
   }, [user]);
 
@@ -131,6 +170,9 @@ function InvoicesDashboard() {
 
   const [isNewMerchantModalOpen, setIsNewMerchantModalOpen] = useState(false);
 
+  // VIP Secret Profit Vault Modal
+  const [isSecretVaultOpen, setIsSecretVaultOpen] = useState(false);
+
   const [testingFirebase, setTestingFirebase] = useState(false);
 
   // Synchronous local + asynchronous Firestore update
@@ -148,6 +190,30 @@ function InvoicesDashboard() {
     } catch (e: any) {
       console.warn('Firestore product update error, saved locally:', e);
       showToast(`تنبيه: حُفظت المنتجات محلياً فقط (${e?.message || 'تعذر الاتصال بـ Firebase'})`, 'error');
+    }
+  };
+
+  const handleSavePricingTiers = async (newTiers: ProductPricingTier[]) => {
+    setPricingTiers(newTiers);
+    saveStoredPricingTiers(newTiers);
+    try {
+      await savePricingTiersToFirestore(newTiers);
+      showToast('تم حفظ وتحديث جدول أسعار المصنع والشركة سحابياً في Firebase', 'success');
+    } catch (e: any) {
+      console.warn('Firestore pricing tiers error:', e);
+      showToast(`تنبيه: حُفظت الأسعار محلياً (${e?.message || 'خطأ اتصال'})`, 'error');
+    }
+  };
+
+  const handleSaveVaultSettings = async (newSettings: VaultSettings) => {
+    setVaultSettings(newSettings);
+    saveStoredVaultSettings(newSettings);
+    try {
+      await saveVaultSettingsToFirestore(newSettings);
+      showToast('تم تحديث إعدادات وصلاحيات الخزنة السرية في Firebase', 'success');
+    } catch (e: any) {
+      console.warn('Firestore vault settings error:', e);
+      showToast(`تنبيه: حُفظت إعدادات الخزنة محلياً (${e?.message || 'خطأ اتصال'})`, 'error');
     }
   };
 
@@ -508,6 +574,7 @@ function InvoicesDashboard() {
         onOpenCustomerLedger={() => setIsCustomerLedgerOpen(true)}
         onOpenCatalog={() => setIsProductCatalogOpen(true)}
         onOpenTeamManagement={() => setIsTeamModalOpen(true)}
+        onOpenSecretVault={() => setIsSecretVaultOpen(true)}
         onExportCSV={handleExportCSV}
         onClearData={handleClearAllData}
         invoicesCount={invoices.length}
@@ -539,6 +606,16 @@ function InvoicesDashboard() {
           {/* Quick Actions & Header Buttons */}
           <div className="flex flex-wrap items-center gap-2.5 z-10 w-full md:w-auto">
             
+            {/* Secret Vault Shortcut Button */}
+            <button
+              onClick={() => setIsSecretVaultOpen(true)}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-black text-slate-950 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 rounded-xl shadow-md shadow-amber-400/20 transition-all cursor-pointer whitespace-nowrap"
+              title="خزنة وهوامش الأرباح السرية بين أسعار المصنع والشركة والتجار"
+            >
+              <Lock className="w-4 h-4" />
+              <span>خزنة الأرباح السرية</span>
+            </button>
+
             <button
               onClick={() => setIsNewMerchantModalOpen(true)}
               className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 active:bg-teal-800 rounded-xl shadow-md shadow-teal-600/30 transition-all cursor-pointer whitespace-nowrap"
@@ -644,6 +721,14 @@ function InvoicesDashboard() {
             </span>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsSecretVaultOpen(true)}
+              className="text-amber-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <Lock className="w-3 h-3" />
+              <span>خزنة الأرباح</span>
+            </button>
+            <span>•</span>
             <button
               onClick={() => setIsTeamModalOpen(true)}
               className="text-teal-700 hover:underline cursor-pointer"
@@ -770,6 +855,18 @@ function InvoicesDashboard() {
         isOpen={isNewMerchantModalOpen}
         onClose={() => setIsNewMerchantModalOpen(false)}
         onAddMerchant={handleAddNewMerchant}
+      />
+
+      {/* 11. Secret VIP Profit Vault Modal */}
+      <SecretProfitVaultModal
+        isOpen={isSecretVaultOpen}
+        onClose={() => setIsSecretVaultOpen(false)}
+        currentUserEmail={user?.email}
+        invoices={invoices}
+        pricingTiers={pricingTiers}
+        vaultSettings={vaultSettings}
+        onSavePricingTiers={handleSavePricingTiers}
+        onSaveVaultSettings={handleSaveVaultSettings}
       />
 
     </div>

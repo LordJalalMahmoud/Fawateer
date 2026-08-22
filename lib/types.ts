@@ -57,3 +57,53 @@ export interface CustomerBalance {
   lastInvoiceDate: string;
   status: 'SETTLED' | 'IN_DEBT' | 'OVERPAID';
 }
+
+export interface ProductPricingTier {
+  id: string;
+  productName: string;
+  category: string;
+  factoryPrice: number; // سعر المصنع
+  companyPrice: number; // سعر الشركة
+  unit: string;
+  aliases?: string[];
+}
+
+export interface VaultSettings {
+  authorizedEmails: string[];
+  securityPin?: string;
+  updatedAt?: string;
+}
+
+export interface ItemProfitCalculation {
+  itemId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  merchantUnitPrice: number;
+  companyUnitPrice: number;
+  factoryUnitPrice: number;
+  
+  // Total amounts
+  merchantRevenueTotal: number; // Q * merchantUnitPrice
+  companyCostTotal: number;     // Q * companyUnitPrice
+  factoryCostTotal: number;     // Q * factoryUnitPrice
+  
+  // Profits
+  companyProfitTotal: number;   // Q * (merchantUnitPrice - companyUnitPrice)
+  factoryToCompanyProfitTotal: number; // Q * (companyUnitPrice - factoryUnitPrice)
+  totalProfit: number;          // Q * (merchantUnitPrice - factoryUnitPrice)
+}
+
+export interface InvoiceProfitBreakdown {
+  invoiceId: string;
+  invoiceNumber: string;
+  date: string;
+  customerName: string;
+  items: ItemProfitCalculation[];
+  invoiceMerchantRevenue: number;
+  invoiceCompanyCost: number;
+  invoiceFactoryCost: number;
+  invoiceCompanyProfit: number;
+  invoiceFactoryToCompanyProfit: number;
+  invoiceTotalProfit: number;
+}
