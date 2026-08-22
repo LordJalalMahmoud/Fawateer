@@ -1,4 +1,4 @@
-import { Invoice, ProductCatalogItem, CustomerBalance, ProductPricingTier, VaultSettings } from './types';
+import { Invoice, ProductCatalogItem, CustomerBalance, ProductPricingTier, VaultSettings, CourierSettlement } from './types';
 import { INITIAL_INVOICES, INITIAL_PRODUCTS } from './sample-data';
 import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
@@ -6,6 +6,33 @@ const INVOICES_STORAGE_KEY = 'detergent_invoices_v1';
 const PRODUCTS_STORAGE_KEY = 'detergent_products_v1';
 const PRICING_TIERS_STORAGE_KEY = 'detergent_pricing_tiers_v1';
 const VAULT_SETTINGS_STORAGE_KEY = 'detergent_vault_settings_v1';
+const COURIER_SETTLEMENTS_STORAGE_KEY = 'detergent_courier_settlements_v1';
+
+export const INITIAL_COURIER_SETTLEMENTS: CourierSettlement[] = [];
+
+export function getStoredCourierSettlements(): CourierSettlement[] {
+  if (typeof window === 'undefined') return INITIAL_COURIER_SETTLEMENTS;
+  try {
+    const raw = localStorage.getItem(COURIER_SETTLEMENTS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(COURIER_SETTLEMENTS_STORAGE_KEY, JSON.stringify(INITIAL_COURIER_SETTLEMENTS));
+      return INITIAL_COURIER_SETTLEMENTS;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading courier settlements from localStorage', e);
+    return INITIAL_COURIER_SETTLEMENTS;
+  }
+}
+
+export function saveStoredCourierSettlements(settlements: CourierSettlement[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(COURIER_SETTLEMENTS_STORAGE_KEY, JSON.stringify(settlements));
+  } catch (e) {
+    console.error('Error saving courier settlements to localStorage', e);
+  }
+}
 
 export function getStoredInvoices(): Invoice[] {
   if (typeof window === 'undefined') return INITIAL_INVOICES;

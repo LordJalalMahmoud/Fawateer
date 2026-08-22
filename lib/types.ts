@@ -143,3 +143,77 @@ export interface InvoiceProfitBreakdown {
   pendingCompanyProfit: number;
   pendingFactoryProfit: number;
 }
+
+// ----------------------------------------------------
+// 🚚 تحصيلات شركات الشحن والبيع القطاعي (Retail / Courier Settlements)
+// ----------------------------------------------------
+export interface RetailSoldItem {
+  id: string;
+  productName: string;
+  quantity: number;
+  unit: string; // 'كرتونة' | 'قطعة'
+  retailUnitPrice: number; // سعر البيع القطاعي للزبون
+  totalAmount: number; // quantity * retailUnitPrice
+  piecesPerCarton?: number; // لو البيع بالقطعة، عدد القطع في الكرتونة لحساب تكلفة المصنع والشركة بدقة
+}
+
+export interface CourierSettlement {
+  id: string;
+  courierName: string; // اسم شركة الشحن (بوسطة، أوتو، شيب بلو، ارامكس، مندوب، etc.)
+  manifestNumber: string; // رقم الكشف أو البوليصة أو الشحنة
+  date: string; // YYYY-MM-DD
+  collectedCash: number; // المبلغ المحصل من شركة الشحن (الفلوس المقبوضة)
+  shippingFeeDeducted: number; // مصاريف وعمولة شركة الشحن المخصومة
+  totalOrderValue: number; // إجمالي قيمة البضاعة المباعة قطاعي
+  netCashReceived: number; // صافي المبلغ المستلم فعلياً
+  items: RetailSoldItem[];
+  notes?: string;
+  status: 'COMPLETED' | 'PARTIAL' | 'PENDING';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourierItemProfitCalculation {
+  itemId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  retailUnitPrice: number;
+  retailRevenueTotal: number;
+  factoryCostTotal: number;
+  companyCostTotal: number;
+  companyProfitTotal: number;
+  factoryProfitTotal: number;
+  totalProfit: number;
+  
+  // Realized based on collected cash ratio
+  paidRatio: number;
+  realizedRetailRevenue: number;
+  realizedCompanyCost: number;
+  realizedFactoryCost: number;
+  realizedCompanyProfit: number;
+  realizedFactoryProfit: number;
+  realizedTotalProfit: number;
+}
+
+export interface CourierProfitBreakdown {
+  settlementId: string;
+  courierName: string;
+  manifestNumber: string;
+  date: string;
+  collectedCash: number;
+  shippingFeeDeducted: number;
+  netCashReceived: number;
+  totalRetailValue: number;
+  totalFactoryCost: number;
+  totalCompanyCost: number;
+  paidRatio: number;
+
+  // Calculated Realized Profits
+  realizedCompanyProfit: number;
+  realizedFactoryProfit: number;
+  realizedTotalProfit: number; // Net profit after factory cost & shipping fee
+  
+  items: CourierItemProfitCalculation[];
+}
+

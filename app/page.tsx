@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Invoice, ProductCatalogItem, PaymentStatus, ProductPricingTier, VaultSettings } from '@/lib/types';
+import { Invoice, ProductCatalogItem, PaymentStatus, ProductPricingTier, VaultSettings, CourierSettlement } from '@/lib/types';
 import { 
   getStoredInvoices, 
   saveStoredInvoices, 
@@ -11,6 +11,8 @@ import {
   saveStoredPricingTiers,
   getStoredVaultSettings,
   saveStoredVaultSettings,
+  getStoredCourierSettlements,
+  saveStoredCourierSettlements,
   resetToEmptyData,
   exportInvoicesToCSV 
 } from '@/lib/storage';
@@ -19,11 +21,14 @@ import {
   subscribeToProducts, 
   subscribeToPricingTiers,
   subscribeToVaultSettings,
+  subscribeToCourierSettlements,
   saveInvoiceToFirestore, 
   deleteInvoiceFromFirestore, 
   saveProductsToFirestore,
   savePricingTiersToFirestore,
   saveVaultSettingsToFirestore,
+  saveCourierSettlementToFirestore,
+  deleteCourierSettlementFromFirestore,
   testFirestoreDirectWrite
 } from '@/lib/firestore-service';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
@@ -43,6 +48,7 @@ import { AddMerchantGoodsModal } from '@/components/AddMerchantGoodsModal';
 import { AddMerchantPaymentModal } from '@/components/AddMerchantPaymentModal';
 import { NewMerchantModal } from '@/components/NewMerchantModal';
 import { SecretProfitVaultModal } from '@/components/SecretProfitVaultModal';
+import { CourierSettlementsModal } from '@/components/CourierSettlementsModal';
 import { 
   FilePlus, 
   Check, 
@@ -67,6 +73,7 @@ function InvoicesDashboard() {
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => getStoredProducts());
   const [pricingTiers, setPricingTiers] = useState<ProductPricingTier[]>(() => getStoredPricingTiers());
   const [vaultSettings, setVaultSettings] = useState<VaultSettings>(() => getStoredVaultSettings());
+  const [courierSettlements, setCourierSettlements] = useState<CourierSettlement[]>(() => getStoredCourierSettlements());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
 
   // Main Dashboard View Mode: 'MERCHANTS' (حسابات التجار) vs 'INVOICES' (سجل الفواتير)
@@ -133,11 +140,24 @@ function InvoicesDashboard() {
       }
     );
 
+    const unsubCourier = subscribeToCourierSettlements(
+      (remoteCourier) => {
+        if (remoteCourier) {
+          setCourierSettlements(remoteCourier);
+          saveStoredCourierSettlements(remoteCourier);
+        }
+      },
+      (err) => {
+        console.warn('Courier settlements sync issue:', err);
+      }
+    );
+
     return () => {
       unsubInvoices();
       unsubProducts();
       unsubPricing();
       unsubVault();
+      unsubCourier();
     };
   }, [user]);
 
@@ -172,6 +192,9 @@ function InvoicesDashboard() {
 
   // VIP Secret Profit Vault Modal
   const [isSecretVaultOpen, setIsSecretVaultOpen] = useState(false);
+
+  // Courier & Retail Settlements Modal
+  const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
 
   const [testingFirebase, setTestingFirebase] = useState(false);
 
@@ -214,6 +237,43 @@ function InvoicesDashboard() {
     } catch (e: any) {
       console.warn('Firestore vault settings error:', e);
       showToast(`تنبيه: حُفظت إعدادات الخزنة محلياً (${e?.message || 'خطأ اتصال'})`, 'error');
+    }
+  };
+
+  // Actions: Courier & Retail Settlements
+  const handleSaveCourierSettlement = async (settlement: CourierSettlement) => {
+    const existingIndex = courierSettlements.findIndex(s => s.id === settlement.id);
+    let updated: CourierSettlement[];
+    if (existingIndex >= 0) {
+      updated = [...courierSettlements];
+      updated[existingIndex] = settlement;
+    } else {
+      updated = [settlement, ...courierSettlements];
+    }
+    setCourierSettlements(updated);
+    saveStoredCourierSettlements(updated);
+    confetti({ particleCount: 35, spread: 45 });
+
+    try {
+      await saveCourierSettlementToFirestore(settlement);
+      showToast(`تم توثيق تسوية شركة الشحن (${settlement.courierName}) في Firebase بنجاح`, 'success');
+    } catch (e: any) {
+      console.warn('Firestore courier settlement error:', e);
+      showToast(`تم حفظ تحصيل الشحن محلياً (${e?.message || 'تعذر الاتصال'})`, 'info');
+    }
+  };
+
+  const handleDeleteCourierSettlement = async (settlementId: string) => {
+    const updated = courierSettlements.filter(s => s.id !== settlementId);
+    setCourierSettlements(updated);
+    saveStoredCourierSettlements(updated);
+
+    try {
+      await deleteCourierSettlementFromFirestore(settlementId);
+      showToast('تم حذف تسوية شركة الشحن من Firebase', 'info');
+    } catch (e: any) {
+      console.warn('Firestore delete courier settlement error:', e);
+      showToast('تم الحذف محلياً', 'info');
     }
   };
 
@@ -575,9 +635,11 @@ function InvoicesDashboard() {
         onOpenCatalog={() => setIsProductCatalogOpen(true)}
         onOpenTeamManagement={() => setIsTeamModalOpen(true)}
         onOpenSecretVault={() => setIsSecretVaultOpen(true)}
+        onOpenCourierSettlements={() => setIsCourierModalOpen(true)}
         onExportCSV={handleExportCSV}
         onClearData={handleClearAllData}
         invoicesCount={invoices.length}
+        courierCount={courierSettlements.length}
       />
 
       {/* Main Container */}
@@ -863,10 +925,26 @@ function InvoicesDashboard() {
         onClose={() => setIsSecretVaultOpen(false)}
         currentUserEmail={user?.email}
         invoices={invoices}
+        courierSettlements={courierSettlements}
         pricingTiers={pricingTiers}
         vaultSettings={vaultSettings}
         onSavePricingTiers={handleSavePricingTiers}
         onSaveVaultSettings={handleSaveVaultSettings}
+        onOpenCourierModal={() => {
+          setIsSecretVaultOpen(false);
+          setIsCourierModalOpen(true);
+        }}
+      />
+
+      {/* 12. Courier & Retail Settlements Modal */}
+      <CourierSettlementsModal
+        isOpen={isCourierModalOpen}
+        onClose={() => setIsCourierModalOpen(false)}
+        courierSettlements={courierSettlements}
+        pricingTiers={pricingTiers}
+        products={products}
+        onSaveSettlement={handleSaveCourierSettlement}
+        onDeleteSettlement={handleDeleteCourierSettlement}
       />
 
     </div>

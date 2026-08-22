@@ -6,9 +6,11 @@ import {
   ProductPricingTier, 
   VaultSettings, 
   InvoiceProfitBreakdown, 
-  ItemProfitCalculation 
+  ItemProfitCalculation,
+  CourierSettlement,
+  CourierProfitBreakdown
 } from '@/lib/types';
-import { calculateInvoiceProfit, findPricingTier } from '@/lib/pricing-data';
+import { calculateInvoiceProfit, findPricingTier, calculateCourierSettlementProfit } from '@/lib/pricing-data';
 import { 
   Lock, 
   Unlock, 
@@ -40,7 +42,9 @@ import {
   Clock,
   AlertCircle,
   BarChart3,
-  ArrowUpRight
+  ArrowUpRight,
+  Truck,
+  Package
 } from 'lucide-react';
 
 interface SecretProfitVaultModalProps {
@@ -48,10 +52,12 @@ interface SecretProfitVaultModalProps {
   onClose: () => void;
   currentUserEmail?: string | null;
   invoices: Invoice[];
+  courierSettlements?: CourierSettlement[];
   pricingTiers: ProductPricingTier[];
   vaultSettings: VaultSettings;
   onSavePricingTiers: (tiers: ProductPricingTier[]) => Promise<void>;
   onSaveVaultSettings: (settings: VaultSettings) => Promise<void>;
+  onOpenCourierModal?: () => void;
 }
 
 export function SecretProfitVaultModal({
@@ -59,10 +65,12 @@ export function SecretProfitVaultModal({
   onClose,
   currentUserEmail,
   invoices,
+  courierSettlements = [],
   pricingTiers,
   vaultSettings,
   onSavePricingTiers,
   onSaveVaultSettings,
+  onOpenCourierModal,
 }: SecretProfitVaultModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -82,8 +90,8 @@ export function SecretProfitVaultModal({
   const [isPinUnlocked, setIsPinUnlocked] = useState(false);
   const [pinError, setPinError] = useState('');
 
-  // Active Tab: 'COLLECTED_PROFIT' | 'ALL_PROFIT' | 'COMPARISON' | 'PRICING_TIERS' | 'PERMISSIONS'
-  const [activeTab, setActiveTab] = useState<'COLLECTED_PROFIT' | 'ALL_PROFIT' | 'COMPARISON' | 'PRICING_TIERS' | 'PERMISSIONS'>('COLLECTED_PROFIT');
+  // Active Tab: 'COLLECTED_PROFIT' | 'ALL_PROFIT' | 'COURIER_PROFIT' | 'COMPARISON' | 'PRICING_TIERS' | 'PERMISSIONS'
+  const [activeTab, setActiveTab] = useState<'COLLECTED_PROFIT' | 'ALL_PROFIT' | 'COURIER_PROFIT' | 'COMPARISON' | 'PRICING_TIERS' | 'PERMISSIONS'>('COLLECTED_PROFIT');
 
   // Filters for Analytics
   const [dateFilter, setDateFilter] = useState<'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>('ALL');
@@ -484,6 +492,24 @@ export function SecretProfitVaultModal({
     return Array.from(set).sort();
   }, [invoices, pricingTiers]);
 
+  // Courier / Retail Profits Calculations in Secret Vault
+  const courierProfitsList = useMemo<CourierProfitBreakdown[]>(() => {
+    return (courierSettlements || []).map(s => calculateCourierSettlementProfit(s, pricingTiers));
+  }, [courierSettlements, pricingTiers]);
+
+  const courierTotalCollected = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.collectedCash, 0), [courierProfitsList]);
+  const courierTotalRetailValue = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.totalRetailValue, 0), [courierProfitsList]);
+  const courierTotalShippingFee = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.shippingFeeDeducted, 0), [courierProfitsList]);
+  const courierTotalCompanyProfit = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.realizedCompanyProfit, 0), [courierProfitsList]);
+  const courierTotalFactoryProfit = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.realizedFactoryProfit, 0), [courierProfitsList]);
+  const courierTotalNetProfit = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.realizedTotalProfit, 0), [courierProfitsList]);
+
+  // COMBINED BUSINESS METRICS (Wholesale Merchants + Retail Courier Collections)
+  const combinedRealizedCompanyProfit = Number((collectedTotals.realizedCompanyProfit + courierTotalCompanyProfit).toFixed(2));
+  const combinedRealizedFactoryProfit = Number((collectedTotals.realizedFactoryToCompanyProfit + courierTotalFactoryProfit).toFixed(2));
+  const combinedRealizedTotalNetProfit = Number((collectedTotals.realizedTotalProfit + courierTotalNetProfit).toFixed(2));
+  const combinedTotalCashCollected = Number((collectedTotals.realizedMerchantRevenue + courierTotalCollected).toFixed(2));
+
   if (!isOpen) return null;
 
   // Actions for Price Tiers
@@ -842,7 +868,20 @@ export function SecretProfitVaultModal({
                   <span>⚖️ مقارنة ونسب التحصيل والديون</span>
                 </button>
 
-                {/* 4. Pricing Tiers */}
+                {/* 4. Courier & Retail Settlements Profit Tab */}
+                <button
+                  onClick={() => setActiveTab('COURIER_PROFIT')}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'COURIER_PROFIT'
+                      ? 'bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-500/20 font-black'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Truck className="w-4 h-4 text-indigo-300" />
+                  <span>🚚 أرباح تحصيلات الشحن والقطاعي ({courierProfitsList.length})</span>
+                </button>
+
+                {/* 5. Pricing Tiers */}
                 <button
                   onClick={() => setActiveTab('PRICING_TIERS')}
                   className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -855,7 +894,7 @@ export function SecretProfitVaultModal({
                   <span>جدول أسعار المصنع والشركة ({editableTiers.length})</span>
                 </button>
 
-                {/* 5. Permissions */}
+                {/* 6. Permissions */}
                 <button
                   onClick={() => setActiveTab('PERMISSIONS')}
                   className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -1741,7 +1780,194 @@ export function SecretProfitVaultModal({
               </div>
             )}
 
-            {/* TAB 4: PRICE TIERS CONFIGURATION */}
+            {/* TAB: COURIER & RETAIL SETTLEMENTS PROFIT */}
+            {activeTab === 'COURIER_PROFIT' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                
+                {/* Header Banner */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-950/90 via-slate-900 to-slate-900 border border-indigo-500/40">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <Truck className="w-5 h-5 text-indigo-400" />
+                      <span>أرباح تحصيلات شركات الشحن ومبيعات القطاعي</span>
+                    </h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      حساب الأرباح الفعلية الناتجة عن مبيعات القطاعي عبر شركات الشحن (بوسطة، أوتو، شيب بلو...) بناءً على الكاش المستلم ومصاريف الشحن المخصومة.
+                    </p>
+                  </div>
+
+                  {onOpenCourierModal && (
+                    <button
+                      onClick={onOpenCourierModal}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-900 bg-indigo-400 hover:bg-indigo-300 rounded-xl transition-all shadow-md shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>إدارة / إضافة تحصيل شحن</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* KPI Cards for Courier Settlements */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  
+                  {/* Total Collected Cash from Couriers */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-950/80 to-slate-900 border border-indigo-500/40 shadow-lg relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-300">إجمالي الكاش المحصل من الشحن</span>
+                      <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                        <Wallet className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black text-indigo-300 mt-2 font-mono">
+                      {courierTotalCollected.toLocaleString()} <span className="text-xs font-normal">ج.م</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1.5">
+                      قيمة المبيعات الإجمالية: {courierTotalRetailValue.toLocaleString()} ج.م
+                    </div>
+                  </div>
+
+                  {/* Company Profit from Courier */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/80 to-slate-900 border border-emerald-500/40 shadow-lg relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-300">صافي ربح الشركة (قطاعي)</span>
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black text-emerald-400 mt-2 font-mono">
+                      +{courierTotalCompanyProfit.toLocaleString()} <span className="text-xs font-normal">ج.م</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1.5">
+                      بعد خصم الشحن {courierTotalShippingFee.toLocaleString()} ج.م
+                    </div>
+                  </div>
+
+                  {/* Factory Profit from Courier */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-950/80 to-slate-900 border border-cyan-500/40 shadow-lg relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-cyan-300">ربح المصنع من القطاعي</span>
+                      <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                        <Factory className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black text-cyan-400 mt-2 font-mono">
+                      +{courierTotalFactoryProfit.toLocaleString()} <span className="text-xs font-normal">ج.م</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1.5">
+                      هامش المصنع من البضاعة المباعة
+                    </div>
+                  </div>
+
+                  {/* Net Total Realized Profit in Pocket */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-950/80 to-slate-900 border border-amber-500/50 shadow-lg relative overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-300">إجمالي الأرباح في الجيب (شحن)</span>
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black text-amber-300 mt-2 font-mono">
+                      +{courierTotalNetProfit.toLocaleString()} <span className="text-xs font-normal">ج.م</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1.5">
+                      الربح الكلي الصافي من مبيعات الشحن
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Grand Combined Business Overview */}
+                <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-slate-900 to-indigo-950/90 border border-emerald-500/50 space-y-3 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-amber-400" />
+                      <h4 className="text-sm font-black text-white">🌟 إجمالي أرباح البيزنس الشامل (مبيعات الجملة + تحصيلات الشحن القطاعي)</h4>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30">
+                      محصل كاش في الخزينة
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block mb-1">إجمالي الكاش المحصل</span>
+                      <span className="text-base font-black text-white font-mono">{combinedTotalCashCollected.toLocaleString()} ج.م</span>
+                    </div>
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block mb-1">أرباح الشركة المحصلة</span>
+                      <span className="text-base font-black text-emerald-400 font-mono">+{combinedRealizedCompanyProfit.toLocaleString()} ج.م</span>
+                    </div>
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block mb-1">أرباح المصنع المحصلة</span>
+                      <span className="text-base font-black text-cyan-400 font-mono">+{combinedRealizedFactoryProfit.toLocaleString()} ج.م</span>
+                    </div>
+                    <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/40">
+                      <span className="text-[10px] text-amber-300 block mb-1 font-bold">صافي الأرباح الكلية (في الجيب)</span>
+                      <span className="text-lg font-black text-amber-300 font-mono">+{combinedRealizedTotalNetProfit.toLocaleString()} ج.م</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Settlements Breakdown Table */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-indigo-400" />
+                    <span>سجل تسويات شركات الشحن المحسوبة</span>
+                  </h4>
+
+                  {courierProfitsList.length === 0 ? (
+                    <div className="p-12 text-center border border-slate-800 rounded-2xl bg-slate-950/40 space-y-3">
+                      <Truck className="w-12 h-12 text-slate-600 mx-auto" />
+                      <p className="text-sm text-slate-400 font-medium">لم يتم تسجيل أي تسويات لشركات الشحن حتى الآن</p>
+                      {onOpenCourierModal && (
+                        <button
+                          onClick={onOpenCourierModal}
+                          className="px-4 py-2 text-xs font-bold text-slate-900 bg-indigo-400 hover:bg-indigo-300 rounded-xl transition-colors cursor-pointer"
+                        >
+                          تسجيل أول تحصيل شحن
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="border border-slate-800 rounded-2xl overflow-hidden shadow-xl bg-slate-950/40">
+                      <table className="w-full text-right text-xs">
+                        <thead className="bg-slate-950 text-slate-300 font-bold border-b border-slate-800">
+                          <tr>
+                            <th className="py-3 px-3 w-24">التاريخ</th>
+                            <th className="py-3 px-3">شركة الشحن</th>
+                            <th className="py-3 px-3">رقم التسويه</th>
+                            <th className="py-3 px-3 text-left">قيمة البضاعة</th>
+                            <th className="py-3 px-3 text-left text-indigo-300">المحصل كاش</th>
+                            <th className="py-3 px-3 text-left text-rose-400">خصم الشحن</th>
+                            <th className="py-3 px-3 text-left text-emerald-400">ربح الشركة</th>
+                            <th className="py-3 px-3 text-left text-cyan-400">ربح المصنع</th>
+                            <th className="py-3 px-3 text-left text-amber-300 font-black">صافي الربح الكلي</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60">
+                          {courierProfitsList.map((s) => (
+                            <tr key={s.settlementId} className="hover:bg-slate-900/60 transition-colors">
+                              <td className="py-2.5 px-3 font-mono text-slate-400 whitespace-nowrap">{s.date}</td>
+                              <td className="py-2.5 px-3 font-bold text-white whitespace-nowrap">{s.courierName}</td>
+                              <td className="py-2.5 px-3 font-mono text-slate-300 whitespace-nowrap">{s.manifestNumber || '—'}</td>
+                              <td className="py-2.5 px-3 text-left font-mono text-slate-300">{s.totalRetailValue.toLocaleString()} ج</td>
+                              <td className="py-2.5 px-3 text-left font-mono font-bold text-indigo-300">{s.collectedCash.toLocaleString()} ج</td>
+                              <td className="py-2.5 px-3 text-left font-mono text-rose-400">{s.shippingFeeDeducted > 0 ? `-${s.shippingFeeDeducted.toLocaleString()} ج` : '0 ج'}</td>
+                              <td className="py-2.5 px-3 text-left font-mono font-bold text-emerald-400">+{s.realizedCompanyProfit.toLocaleString()} ج</td>
+                              <td className="py-2.5 px-3 text-left font-mono font-bold text-cyan-400">+{s.realizedFactoryProfit.toLocaleString()} ج</td>
+                              <td className="py-2.5 px-3 text-left font-mono font-black text-amber-300 text-sm">+{s.realizedTotalProfit.toLocaleString()} ج</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB 5: PRICE TIERS CONFIGURATION */}
             {activeTab === 'PRICING_TIERS' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
                 

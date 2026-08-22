@@ -12,7 +12,8 @@ import {
   LogOut,
   Database,
   UserCheck,
-  Lock
+  Lock,
+  Truck
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -22,9 +23,11 @@ interface NavbarProps {
   onOpenCatalog: () => void;
   onOpenTeamManagement: () => void;
   onOpenSecretVault: () => void;
+  onOpenCourierSettlements: () => void;
   onExportCSV: () => void;
   onClearData: () => void;
   invoicesCount: number;
+  courierCount?: number;
 }
 
 export function Navbar({
@@ -33,9 +36,11 @@ export function Navbar({
   onOpenCatalog,
   onOpenTeamManagement,
   onOpenSecretVault,
+  onOpenCourierSettlements,
   onExportCSV,
   onClearData,
   invoicesCount,
+  courierCount = 0,
 }: NavbarProps) {
   const { user, logout, projectId } = useAuth();
 
@@ -80,6 +85,22 @@ export function Navbar({
             >
               <Lock className="w-4 h-4 text-amber-400" />
               <span className="hidden sm:inline">خزنة الأرباح</span>
+            </button>
+
+            {/* Courier & Retail Settlements Button */}
+            <button
+              onClick={onOpenCourierSettlements}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors cursor-pointer"
+              title="تحصيلات شركات الشحن ومبيعات القطاعي"
+            >
+              <Truck className="w-4 h-4 text-indigo-600" />
+              <span className="hidden md:inline">تحصيلات الشحن والقطاعي</span>
+              <span className="md:hidden">الشحن</span>
+              {courierCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-bold">
+                  {courierCount}
+                </span>
+              )}
             </button>
 
             {/* Team / Admins Management */}

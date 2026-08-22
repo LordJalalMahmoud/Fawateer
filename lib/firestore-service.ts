@@ -11,11 +11,12 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { Invoice, ProductCatalogItem, ProductPricingTier, VaultSettings } from './types';
+import { Invoice, ProductCatalogItem, ProductPricingTier, VaultSettings, CourierSettlement } from './types';
 import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
 const INVOICES_COLLECTION = 'invoices';
 const PRODUCTS_COLLECTION = 'products';
+const COURIER_COLLECTION = 'courier_settlements';
 const SETTINGS_COLLECTION = 'settings';
 const PRICING_TIERS_DOC = 'pricing_tiers';
 const VAULT_SETTINGS_DOC = 'vault_permissions';
@@ -204,6 +205,52 @@ export async function saveVaultSettingsToFirestore(settings: VaultSettings): Pro
     updatedAt: new Date().toISOString(),
   });
   await setDoc(docRef, cleanData, { merge: true });
+}
+
+/**
+ * Real-time listener for Courier / Retail Settlements in Firestore
+ */
+export function subscribeToCourierSettlements(
+  onData: (settlements: CourierSettlement[]) => void,
+  onError?: (err: Error) => void
+) {
+  const q = query(collection(db, COURIER_COLLECTION), orderBy('date', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: CourierSettlement[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          ...data,
+        } as CourierSettlement);
+      });
+      onData(items);
+    },
+    (error) => {
+      console.warn('Firestore onSnapshot courier_settlements error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save / Update a Courier Settlement in Firestore
+ */
+export async function saveCourierSettlementToFirestore(settlement: CourierSettlement): Promise<void> {
+  const cleanData = cleanForFirestore(settlement);
+  const docRef = doc(db, COURIER_COLLECTION, settlement.id);
+  await setDoc(docRef, cleanData, { merge: true });
+}
+
+/**
+ * Delete a Courier Settlement in Firestore
+ */
+export async function deleteCourierSettlementFromFirestore(settlementId: string): Promise<void> {
+  const docRef = doc(db, COURIER_COLLECTION, settlementId);
+  await deleteDoc(docRef);
 }
 
 /**

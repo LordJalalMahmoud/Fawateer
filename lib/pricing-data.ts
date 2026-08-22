@@ -1,4 +1,13 @@
-import { ProductPricingTier, Invoice, InvoiceItem, InvoiceProfitBreakdown, ItemProfitCalculation } from './types';
+import { 
+  ProductPricingTier, 
+  Invoice, 
+  InvoiceItem, 
+  InvoiceProfitBreakdown, 
+  ItemProfitCalculation,
+  CourierSettlement,
+  CourierProfitBreakdown,
+  CourierItemProfitCalculation
+} from './types';
 
 export const DEFAULT_PRICING_TIERS: ProductPricingTier[] = [
   {
@@ -276,3 +285,103 @@ export function calculateInvoiceProfit(invoice: Invoice, tiers: ProductPricingTi
     pendingFactoryProfit,
   };
 }
+
+/**
+ * Calculate profit breakdown for a Courier / Retail settlement
+ */
+export function calculateCourierSettlementProfit(
+  settlement: CourierSettlement, 
+  tiers: ProductPricingTier[]
+): CourierProfitBreakdown {
+  const totalRetailValue = Number(settlement.totalOrderValue) || 
+    (settlement.items || []).reduce((sum, it) => sum + (Number(it.quantity) * Number(it.retailUnitPrice)), 0);
+  const collectedCash = Number(settlement.collectedCash) || 0;
+  const shippingFeeDeducted = Number(settlement.shippingFeeDeducted) || 0;
+  const netCashReceived = Number(settlement.netCashReceived ?? Math.max(0, collectedCash - shippingFeeDeducted));
+
+  let paidRatio = 1;
+  if (totalRetailValue > 0) {
+    paidRatio = Math.min(1, Math.max(0, collectedCash / totalRetailValue));
+  }
+
+  const itemsCalculations: CourierItemProfitCalculation[] = (settlement.items || []).map(it => {
+    const tier = findPricingTier(it.productName, tiers);
+    const qty = Number(it.quantity) || 0;
+    const retailUnitPrice = Number(it.retailUnitPrice) || 0;
+    const retailRevenueTotal = Number((qty * retailUnitPrice).toFixed(2));
+    
+    // Check unit: piece vs carton
+    let unitMultiplier = 1;
+    if (it.unit === 'قطعة') {
+      const pieces = it.piecesPerCarton && it.piecesPerCarton > 0 ? it.piecesPerCarton : 12;
+      unitMultiplier = 1 / pieces;
+    }
+
+    const factoryCostPerUnit = tier ? tier.factoryPrice * unitMultiplier : retailUnitPrice * 0.5;
+    const companyCostPerUnit = tier ? tier.companyPrice * unitMultiplier : retailUnitPrice * 0.7;
+
+    const factoryCostTotal = Number((qty * factoryCostPerUnit).toFixed(2));
+    const companyCostTotal = Number((qty * companyCostPerUnit).toFixed(2));
+
+    const companyProfitTotal = Number((retailRevenueTotal - companyCostTotal).toFixed(2));
+    const factoryProfitTotal = Number((companyCostTotal - factoryCostTotal).toFixed(2));
+    const totalProfit = Number((retailRevenueTotal - factoryCostTotal).toFixed(2));
+
+    // Realized portions
+    const realizedRetailRevenue = Number((retailRevenueTotal * paidRatio).toFixed(2));
+    const realizedCompanyCost = Number((companyCostTotal * paidRatio).toFixed(2));
+    const realizedFactoryCost = Number((factoryCostTotal * paidRatio).toFixed(2));
+    const realizedCompanyProfit = Number((companyProfitTotal * paidRatio).toFixed(2));
+    const realizedFactoryProfit = Number((factoryProfitTotal * paidRatio).toFixed(2));
+    const realizedTotalProfit = Number((totalProfit * paidRatio).toFixed(2));
+
+    return {
+      itemId: it.id,
+      productName: it.productName,
+      unit: it.unit || 'قطعة',
+      quantity: qty,
+      retailUnitPrice,
+      retailRevenueTotal,
+      factoryCostTotal,
+      companyCostTotal,
+      companyProfitTotal,
+      factoryProfitTotal,
+      totalProfit,
+      paidRatio,
+      realizedRetailRevenue,
+      realizedCompanyCost,
+      realizedFactoryCost,
+      realizedCompanyProfit,
+      realizedFactoryProfit,
+      realizedTotalProfit,
+    };
+  });
+
+  const totalFactoryCost = Number(itemsCalculations.reduce((sum, it) => sum + it.factoryCostTotal, 0).toFixed(2));
+  const totalCompanyCost = Number(itemsCalculations.reduce((sum, it) => sum + it.companyCostTotal, 0).toFixed(2));
+  
+  const realizedCompanyProfit = Number(itemsCalculations.reduce((sum, it) => sum + it.realizedCompanyProfit, 0).toFixed(2));
+  const realizedFactoryProfit = Number(itemsCalculations.reduce((sum, it) => sum + it.realizedFactoryProfit, 0).toFixed(2));
+  
+  // Net profit in pocket after deducting shipping company commission/fee
+  const realizedTotalProfit = Number(Math.max(0, (itemsCalculations.reduce((sum, it) => sum + it.realizedTotalProfit, 0) - shippingFeeDeducted)).toFixed(2));
+
+  return {
+    settlementId: settlement.id,
+    courierName: settlement.courierName || 'شركة الشحن',
+    manifestNumber: settlement.manifestNumber || 'كشف بدون رقم',
+    date: settlement.date,
+    collectedCash,
+    shippingFeeDeducted,
+    netCashReceived,
+    totalRetailValue,
+    totalFactoryCost,
+    totalCompanyCost,
+    paidRatio,
+    realizedCompanyProfit,
+    realizedFactoryProfit,
+    realizedTotalProfit,
+    items: itemsCalculations,
+  };
+}
+
