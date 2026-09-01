@@ -1,4 +1,4 @@
-import { Invoice, ProductCatalogItem, CustomerBalance, ProductPricingTier, VaultSettings, CourierSettlement } from './types';
+import { Invoice, ProductCatalogItem, CustomerBalance, ProductPricingTier, VaultSettings, CourierSettlement, ExpenseItem, Employee, SalaryPaymentRecord } from './types';
 import { INITIAL_INVOICES, INITIAL_PRODUCTS } from './sample-data';
 import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
@@ -7,8 +7,87 @@ const PRODUCTS_STORAGE_KEY = 'detergent_products_v1';
 const PRICING_TIERS_STORAGE_KEY = 'detergent_pricing_tiers_v1';
 const VAULT_SETTINGS_STORAGE_KEY = 'detergent_vault_settings_v1';
 const COURIER_SETTLEMENTS_STORAGE_KEY = 'detergent_courier_settlements_v1';
+const EXPENSES_STORAGE_KEY = 'detergent_expenses_v1';
+const EMPLOYEES_STORAGE_KEY = 'detergent_employees_v1';
+const SALARY_PAYMENTS_STORAGE_KEY = 'detergent_salary_payments_v1';
 
 export const INITIAL_COURIER_SETTLEMENTS: CourierSettlement[] = [];
+export const INITIAL_EXPENSES: ExpenseItem[] = [];
+export const INITIAL_EMPLOYEES: Employee[] = [];
+export const INITIAL_SALARY_PAYMENTS: SalaryPaymentRecord[] = [];
+
+export function getStoredExpenses(): ExpenseItem[] {
+  if (typeof window === 'undefined') return INITIAL_EXPENSES;
+  try {
+    const raw = localStorage.getItem(EXPENSES_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(INITIAL_EXPENSES));
+      return INITIAL_EXPENSES;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading expenses from localStorage', e);
+    return INITIAL_EXPENSES;
+  }
+}
+
+export function saveStoredExpenses(expenses: ExpenseItem[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(expenses));
+  } catch (e) {
+    console.error('Error saving expenses to localStorage', e);
+  }
+}
+
+export function getStoredEmployees(): Employee[] {
+  if (typeof window === 'undefined') return INITIAL_EMPLOYEES;
+  try {
+    const raw = localStorage.getItem(EMPLOYEES_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(INITIAL_EMPLOYEES));
+      return INITIAL_EMPLOYEES;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading employees from localStorage', e);
+    return INITIAL_EMPLOYEES;
+  }
+}
+
+export function saveStoredEmployees(employees: Employee[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(employees));
+  } catch (e) {
+    console.error('Error saving employees to localStorage', e);
+  }
+}
+
+export function getStoredSalaryPayments(): SalaryPaymentRecord[] {
+  if (typeof window === 'undefined') return INITIAL_SALARY_PAYMENTS;
+  try {
+    const raw = localStorage.getItem(SALARY_PAYMENTS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(SALARY_PAYMENTS_STORAGE_KEY, JSON.stringify(INITIAL_SALARY_PAYMENTS));
+      return INITIAL_SALARY_PAYMENTS;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading salary payments from localStorage', e);
+    return INITIAL_SALARY_PAYMENTS;
+  }
+}
+
+export function saveStoredSalaryPayments(payments: SalaryPaymentRecord[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SALARY_PAYMENTS_STORAGE_KEY, JSON.stringify(payments));
+  } catch (e) {
+    console.error('Error saving salary payments to localStorage', e);
+  }
+}
+
 
 export function getStoredCourierSettlements(): CourierSettlement[] {
   if (typeof window === 'undefined') return INITIAL_COURIER_SETTLEMENTS;

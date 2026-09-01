@@ -1,7 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Invoice, ProductCatalogItem, PaymentStatus, ProductPricingTier, VaultSettings, CourierSettlement } from '@/lib/types';
+import { 
+  Invoice, 
+  ProductCatalogItem, 
+  PaymentStatus, 
+  ProductPricingTier, 
+  VaultSettings, 
+  CourierSettlement,
+  ExpenseItem,
+  Employee,
+  SalaryPaymentRecord
+} from '@/lib/types';
 import { 
   getStoredInvoices, 
   saveStoredInvoices, 
@@ -13,6 +23,12 @@ import {
   saveStoredVaultSettings,
   getStoredCourierSettlements,
   saveStoredCourierSettlements,
+  getStoredExpenses,
+  saveStoredExpenses,
+  getStoredEmployees,
+  saveStoredEmployees,
+  getStoredSalaryPayments,
+  saveStoredSalaryPayments,
   resetToEmptyData,
   exportInvoicesToCSV 
 } from '@/lib/storage';
@@ -22,6 +38,15 @@ import {
   subscribeToPricingTiers,
   subscribeToVaultSettings,
   subscribeToCourierSettlements,
+  subscribeToExpenses,
+  saveExpenseToFirestore,
+  deleteExpenseFromFirestore,
+  subscribeToEmployees,
+  saveEmployeeToFirestore,
+  deleteEmployeeFromFirestore,
+  subscribeToSalaryPayments,
+  saveSalaryPaymentToFirestore,
+  deleteSalaryPaymentFromFirestore,
   saveInvoiceToFirestore, 
   deleteInvoiceFromFirestore, 
   saveProductsToFirestore,
@@ -49,6 +74,7 @@ import { AddMerchantPaymentModal } from '@/components/AddMerchantPaymentModal';
 import { NewMerchantModal } from '@/components/NewMerchantModal';
 import { SecretProfitVaultModal } from '@/components/SecretProfitVaultModal';
 import { CourierSettlementsModal } from '@/components/CourierSettlementsModal';
+import { ExpensesPayrollModal } from '@/components/ExpensesPayrollModal';
 import { 
   FilePlus, 
   Check, 
@@ -74,6 +100,9 @@ function InvoicesDashboard() {
   const [pricingTiers, setPricingTiers] = useState<ProductPricingTier[]>(() => getStoredPricingTiers());
   const [vaultSettings, setVaultSettings] = useState<VaultSettings>(() => getStoredVaultSettings());
   const [courierSettlements, setCourierSettlements] = useState<CourierSettlement[]>(() => getStoredCourierSettlements());
+  const [expenses, setExpenses] = useState<ExpenseItem[]>(() => getStoredExpenses());
+  const [employees, setEmployees] = useState<Employee[]>(() => getStoredEmployees());
+  const [salaryPayments, setSalaryPayments] = useState<SalaryPaymentRecord[]>(() => getStoredSalaryPayments());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
 
   // Main Dashboard View Mode: 'MERCHANTS' (حسابات التجار) vs 'INVOICES' (سجل الفواتير)
@@ -152,12 +181,51 @@ function InvoicesDashboard() {
       }
     );
 
+    const unsubExpenses = subscribeToExpenses(
+      (remoteExpenses) => {
+        if (remoteExpenses) {
+          setExpenses(remoteExpenses);
+          saveStoredExpenses(remoteExpenses);
+        }
+      },
+      (err) => {
+        console.warn('Expenses sync issue:', err);
+      }
+    );
+
+    const unsubEmployees = subscribeToEmployees(
+      (remoteEmployees) => {
+        if (remoteEmployees) {
+          setEmployees(remoteEmployees);
+          saveStoredEmployees(remoteEmployees);
+        }
+      },
+      (err) => {
+        console.warn('Employees sync issue:', err);
+      }
+    );
+
+    const unsubSalaries = subscribeToSalaryPayments(
+      (remoteSalaries) => {
+        if (remoteSalaries) {
+          setSalaryPayments(remoteSalaries);
+          saveStoredSalaryPayments(remoteSalaries);
+        }
+      },
+      (err) => {
+        console.warn('Salary payments sync issue:', err);
+      }
+    );
+
     return () => {
       unsubInvoices();
       unsubProducts();
       unsubPricing();
       unsubVault();
       unsubCourier();
+      unsubExpenses();
+      unsubEmployees();
+      unsubSalaries();
     };
   }, [user]);
 
@@ -195,6 +263,9 @@ function InvoicesDashboard() {
 
   // Courier & Retail Settlements Modal
   const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
+
+  // Expenses & Payroll Modal
+  const [isExpensesPayrollOpen, setIsExpensesPayrollOpen] = useState(false);
 
   const [testingFirebase, setTestingFirebase] = useState(false);
 
@@ -237,6 +308,115 @@ function InvoicesDashboard() {
     } catch (e: any) {
       console.warn('Firestore vault settings error:', e);
       showToast(`تنبيه: حُفظت إعدادات الخزنة محلياً (${e?.message || 'خطأ اتصال'})`, 'error');
+    }
+  };
+
+  // Actions: Expenses
+  const handleSaveExpense = async (expense: ExpenseItem) => {
+    const existingIndex = expenses.findIndex(e => e.id === expense.id);
+    let updated: ExpenseItem[];
+    if (existingIndex >= 0) {
+      updated = [...expenses];
+      updated[existingIndex] = expense;
+    } else {
+      updated = [expense, ...expenses];
+    }
+    setExpenses(updated);
+    saveStoredExpenses(updated);
+
+    try {
+      await saveExpenseToFirestore(expense);
+      showToast(`تم تسجيل المصروف (${expense.title}) بنجاح`, 'success');
+    } catch (e: any) {
+      console.warn('Firestore expense error:', e);
+      showToast(`حُفظ المصروف محلياً (${e?.message || 'تعذر الاتصال'})`, 'info');
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    const updated = expenses.filter(e => e.id !== expenseId);
+    setExpenses(updated);
+    saveStoredExpenses(updated);
+
+    try {
+      await deleteExpenseFromFirestore(expenseId);
+      showToast('تم حذف بند المصروف', 'info');
+    } catch (e: any) {
+      console.warn('Firestore delete expense error:', e);
+      showToast('تم الحذف محلياً', 'info');
+    }
+  };
+
+  // Actions: Employees
+  const handleSaveEmployee = async (employee: Employee) => {
+    const existingIndex = employees.findIndex(emp => emp.id === employee.id);
+    let updated: Employee[];
+    if (existingIndex >= 0) {
+      updated = [...employees];
+      updated[existingIndex] = employee;
+    } else {
+      updated = [employee, ...employees];
+    }
+    setEmployees(updated);
+    saveStoredEmployees(updated);
+
+    try {
+      await saveEmployeeToFirestore(employee);
+      showToast(`تم حفظ بيانات الموظف (${employee.name}) في Firebase`, 'success');
+    } catch (e: any) {
+      console.warn('Firestore employee error:', e);
+      showToast(`حُفظ الموظف محلياً (${e?.message || 'تعذر الاتصال'})`, 'info');
+    }
+  };
+
+  const handleDeleteEmployee = async (employeeId: string) => {
+    const updated = employees.filter(emp => emp.id !== employeeId);
+    setEmployees(updated);
+    saveStoredEmployees(updated);
+
+    try {
+      await deleteEmployeeFromFirestore(employeeId);
+      showToast('تم حذف الموظف', 'info');
+    } catch (e: any) {
+      console.warn('Firestore delete employee error:', e);
+      showToast('تم الحذف محلياً', 'info');
+    }
+  };
+
+  // Actions: Salary Payments
+  const handleSaveSalaryPayment = async (payment: SalaryPaymentRecord) => {
+    const existingIndex = salaryPayments.findIndex(p => p.id === payment.id);
+    let updated: SalaryPaymentRecord[];
+    if (existingIndex >= 0) {
+      updated = [...salaryPayments];
+      updated[existingIndex] = payment;
+    } else {
+      updated = [payment, ...salaryPayments];
+    }
+    setSalaryPayments(updated);
+    saveStoredSalaryPayments(updated);
+    confetti({ particleCount: 40, spread: 50 });
+
+    try {
+      await saveSalaryPaymentToFirestore(payment);
+      showToast(`تم توثيق صرف راتب (${payment.employeeName}) في Firebase`, 'success');
+    } catch (e: any) {
+      console.warn('Firestore salary payment error:', e);
+      showToast(`حُفظ إيصال الراتب محلياً (${e?.message || 'تعذر الاتصال'})`, 'info');
+    }
+  };
+
+  const handleDeleteSalaryPayment = async (paymentId: string) => {
+    const updated = salaryPayments.filter(p => p.id !== paymentId);
+    setSalaryPayments(updated);
+    saveStoredSalaryPayments(updated);
+
+    try {
+      await deleteSalaryPaymentFromFirestore(paymentId);
+      showToast('تم إلغاء سجل صرف الراتب', 'info');
+    } catch (e: any) {
+      console.warn('Firestore delete salary payment error:', e);
+      showToast('تم الحذف محلياً', 'info');
     }
   };
 
@@ -636,10 +816,12 @@ function InvoicesDashboard() {
         onOpenTeamManagement={() => setIsTeamModalOpen(true)}
         onOpenSecretVault={() => setIsSecretVaultOpen(true)}
         onOpenCourierSettlements={() => setIsCourierModalOpen(true)}
+        onOpenExpensesPayroll={() => setIsExpensesPayrollOpen(true)}
         onExportCSV={handleExportCSV}
         onClearData={handleClearAllData}
         invoicesCount={invoices.length}
         courierCount={courierSettlements.length}
+        expensesCount={expenses.length}
       />
 
       {/* Main Container */}
@@ -676,6 +858,20 @@ function InvoicesDashboard() {
             >
               <Lock className="w-4 h-4" />
               <span>خزنة الأرباح السرية</span>
+            </button>
+
+            {/* Expenses & Payroll Shortcut Button */}
+            <button
+              onClick={() => setIsExpensesPayrollOpen(true)}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-rose-100 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
+              title="المصروفات التشغيلية ورواتب الموظفين"
+            >
+              <span>المصروفات والرواتب</span>
+              {expenses.length > 0 && (
+                <span className="w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-bold">
+                  {expenses.length}
+                </span>
+              )}
             </button>
 
             <button
@@ -926,6 +1122,7 @@ function InvoicesDashboard() {
         currentUserEmail={user?.email}
         invoices={invoices}
         courierSettlements={courierSettlements}
+        expenses={expenses}
         pricingTiers={pricingTiers}
         vaultSettings={vaultSettings}
         onSavePricingTiers={handleSavePricingTiers}
@@ -933,6 +1130,10 @@ function InvoicesDashboard() {
         onOpenCourierModal={() => {
           setIsSecretVaultOpen(false);
           setIsCourierModalOpen(true);
+        }}
+        onOpenExpensesModal={() => {
+          setIsSecretVaultOpen(false);
+          setIsExpensesPayrollOpen(true);
         }}
       />
 
@@ -945,6 +1146,22 @@ function InvoicesDashboard() {
         products={products}
         onSaveSettlement={handleSaveCourierSettlement}
         onDeleteSettlement={handleDeleteCourierSettlement}
+      />
+
+      {/* 13. Expenses & Payroll Management Modal */}
+      <ExpensesPayrollModal
+        isOpen={isExpensesPayrollOpen}
+        onClose={() => setIsExpensesPayrollOpen(false)}
+        expenses={expenses}
+        employees={employees}
+        salaryPayments={salaryPayments}
+        onSaveExpense={handleSaveExpense}
+        onDeleteExpense={handleDeleteExpense}
+        onSaveEmployee={handleSaveEmployee}
+        onDeleteEmployee={handleDeleteEmployee}
+        onSaveSalaryPayment={handleSaveSalaryPayment}
+        onDeleteSalaryPayment={handleDeleteSalaryPayment}
+        currentUserEmail={user?.email}
       />
 
     </div>

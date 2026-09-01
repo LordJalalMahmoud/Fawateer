@@ -217,3 +217,70 @@ export interface CourierProfitBreakdown {
   items: CourierItemProfitCalculation[];
 }
 
+// ----------------------------------------------------
+// 💰 إدارة المصروفات والرواتب (Expenses & Payroll Management)
+// ----------------------------------------------------
+export type ExpenseCategory =
+  | 'SALARIES'       // رواتب وأجور موظفين وعمال
+  | 'RENT'           // إيجارات مقرات ومخازن
+  | 'UTILITIES'      // كهرباء، مياه، غاز، إنترنت وهاتف
+  | 'TRANSPORT'      // نقل، شحن داخلي، بنزين ومحروقات
+  | 'MARKETING'      // إعلانات وتسويق وحملات
+  | 'PACKAGING_RAW'  // مواد خام وتعبئة وتغليف وكراتين
+  | 'MAINTENANCE'    // صيانة معدات وسيارات ومخازن
+  | 'HOSPITALITY'    // بوفيه، نظافة وضيافة
+  | 'COMMISSIONS'    // عمولات ومكافآت بيع
+  | 'TAX_LEGAL'      // ضرائب، تراخيص ومصاريف قانونية
+  | 'OTHER';         // مصروفات إدارية ونثرية أخرى
+
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'VODAFONE_CASH' | 'INSTAPAY' | 'CHECK';
+
+export interface ExpenseItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string; // وصف أو بند المصروف
+  amount: number;
+  category: ExpenseCategory;
+  paymentMethod: PaymentMethod;
+  recipient?: string; // الجهة أو الشخص المستلم
+  receiptNumber?: string; // رقم الفاتورة أو إيصال السداد
+  employeeId?: string; // لو المصروف مرتبط براتب أو سلفة موظف معين
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  jobTitle: string; // المسمى الوظيفي
+  phone?: string;
+  baseSalary: number; // الراتب الأساسي الشهري
+  fixedAllowances?: number; // بدلات ثابتة (انتقال، وجبة، إلخ)
+  status: 'ACTIVE' | 'ON_LEAVE' | 'RESIGNED';
+  joinDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalaryPaymentRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  month: string; // YYYY-MM
+  paymentDate: string; // YYYY-MM-DD
+  baseSalary: number;
+  allowances: number; // بدلات
+  bonuses: number; // حوافز ومكافآت
+  deductions: number; // خصومات وسلف
+  netPaid: number; // صافي الراتب المصروف
+  paymentMethod: PaymentMethod;
+  expenseId?: string; // رابط مع سجل المصروفات العام
+  notes?: string;
+  status: 'PAID' | 'PENDING';
+  createdAt: string;
+  updatedAt: string;
+}
+
+

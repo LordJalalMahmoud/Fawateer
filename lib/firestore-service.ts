@@ -11,12 +11,15 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { Invoice, ProductCatalogItem, ProductPricingTier, VaultSettings, CourierSettlement } from './types';
+import { Invoice, ProductCatalogItem, ProductPricingTier, VaultSettings, CourierSettlement, ExpenseItem, Employee, SalaryPaymentRecord } from './types';
 import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
 const INVOICES_COLLECTION = 'invoices';
 const PRODUCTS_COLLECTION = 'products';
 const COURIER_COLLECTION = 'courier_settlements';
+const EXPENSES_COLLECTION = 'expenses';
+const EMPLOYEES_COLLECTION = 'employees';
+const SALARY_PAYMENTS_COLLECTION = 'salary_payments';
 const SETTINGS_COLLECTION = 'settings';
 const PRICING_TIERS_DOC = 'pricing_tiers';
 const VAULT_SETTINGS_DOC = 'vault_permissions';
@@ -252,6 +255,145 @@ export async function deleteCourierSettlementFromFirestore(settlementId: string)
   const docRef = doc(db, COURIER_COLLECTION, settlementId);
   await deleteDoc(docRef);
 }
+
+/**
+ * Real-time listener for Expenses in Firestore
+ */
+export function subscribeToExpenses(
+  onData: (expenses: ExpenseItem[]) => void,
+  onError?: (err: Error) => void
+) {
+  const q = query(collection(db, EXPENSES_COLLECTION), orderBy('date', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: ExpenseItem[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          ...data,
+        } as ExpenseItem);
+      });
+      onData(items);
+    },
+    (error) => {
+      console.warn('Firestore onSnapshot expenses error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save / Update an Expense Item in Firestore
+ */
+export async function saveExpenseToFirestore(expense: ExpenseItem): Promise<void> {
+  const cleanData = cleanForFirestore(expense);
+  const docRef = doc(db, EXPENSES_COLLECTION, expense.id);
+  await setDoc(docRef, cleanData, { merge: true });
+}
+
+/**
+ * Delete an Expense Item in Firestore
+ */
+export async function deleteExpenseFromFirestore(expenseId: string): Promise<void> {
+  const docRef = doc(db, EXPENSES_COLLECTION, expenseId);
+  await deleteDoc(docRef);
+}
+
+/**
+ * Real-time listener for Employees in Firestore
+ */
+export function subscribeToEmployees(
+  onData: (employees: Employee[]) => void,
+  onError?: (err: Error) => void
+) {
+  const q = query(collection(db, EMPLOYEES_COLLECTION), orderBy('name', 'asc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: Employee[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          ...data,
+        } as Employee);
+      });
+      onData(items);
+    },
+    (error) => {
+      console.warn('Firestore onSnapshot employees error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save / Update an Employee in Firestore
+ */
+export async function saveEmployeeToFirestore(employee: Employee): Promise<void> {
+  const cleanData = cleanForFirestore(employee);
+  const docRef = doc(db, EMPLOYEES_COLLECTION, employee.id);
+  await setDoc(docRef, cleanData, { merge: true });
+}
+
+/**
+ * Delete an Employee in Firestore
+ */
+export async function deleteEmployeeFromFirestore(employeeId: string): Promise<void> {
+  const docRef = doc(db, EMPLOYEES_COLLECTION, employeeId);
+  await deleteDoc(docRef);
+}
+
+/**
+ * Real-time listener for Salary Payment Records in Firestore
+ */
+export function subscribeToSalaryPayments(
+  onData: (payments: SalaryPaymentRecord[]) => void,
+  onError?: (err: Error) => void
+) {
+  const q = query(collection(db, SALARY_PAYMENTS_COLLECTION), orderBy('paymentDate', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: SalaryPaymentRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          ...data,
+        } as SalaryPaymentRecord);
+      });
+      onData(items);
+    },
+    (error) => {
+      console.warn('Firestore onSnapshot salary_payments error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save / Update a Salary Payment in Firestore
+ */
+export async function saveSalaryPaymentToFirestore(payment: SalaryPaymentRecord): Promise<void> {
+  const cleanData = cleanForFirestore(payment);
+  const docRef = doc(db, SALARY_PAYMENTS_COLLECTION, payment.id);
+  await setDoc(docRef, cleanData, { merge: true });
+}
+
+/**
+ * Delete a Salary Payment in Firestore
+ */
+export async function deleteSalaryPaymentFromFirestore(paymentId: string): Promise<void> {
+  const docRef = doc(db, SALARY_PAYMENTS_COLLECTION, paymentId);
+  await deleteDoc(docRef);
+}
+
 
 /**
  * Test write directly to verify Firestore permissions and connectivity

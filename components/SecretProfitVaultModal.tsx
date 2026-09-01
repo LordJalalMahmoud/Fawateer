@@ -8,7 +8,8 @@ import {
   InvoiceProfitBreakdown, 
   ItemProfitCalculation,
   CourierSettlement,
-  CourierProfitBreakdown
+  CourierProfitBreakdown,
+  ExpenseItem
 } from '@/lib/types';
 import { calculateInvoiceProfit, findPricingTier, calculateCourierSettlementProfit } from '@/lib/pricing-data';
 import { 
@@ -44,7 +45,8 @@ import {
   BarChart3,
   ArrowUpRight,
   Truck,
-  Package
+  Package,
+  TrendingDown
 } from 'lucide-react';
 
 interface SecretProfitVaultModalProps {
@@ -53,11 +55,13 @@ interface SecretProfitVaultModalProps {
   currentUserEmail?: string | null;
   invoices: Invoice[];
   courierSettlements?: CourierSettlement[];
+  expenses?: ExpenseItem[];
   pricingTiers: ProductPricingTier[];
   vaultSettings: VaultSettings;
   onSavePricingTiers: (tiers: ProductPricingTier[]) => Promise<void>;
   onSaveVaultSettings: (settings: VaultSettings) => Promise<void>;
   onOpenCourierModal?: () => void;
+  onOpenExpensesModal?: () => void;
 }
 
 export function SecretProfitVaultModal({
@@ -66,11 +70,13 @@ export function SecretProfitVaultModal({
   currentUserEmail,
   invoices,
   courierSettlements = [],
+  expenses = [],
   pricingTiers,
   vaultSettings,
   onSavePricingTiers,
   onSaveVaultSettings,
   onOpenCourierModal,
+  onOpenExpensesModal,
 }: SecretProfitVaultModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -509,6 +515,14 @@ export function SecretProfitVaultModal({
   const combinedRealizedFactoryProfit = Number((collectedTotals.realizedFactoryToCompanyProfit + courierTotalFactoryProfit).toFixed(2));
   const combinedRealizedTotalNetProfit = Number((collectedTotals.realizedTotalProfit + courierTotalNetProfit).toFixed(2));
   const combinedTotalCashCollected = Number((collectedTotals.realizedMerchantRevenue + courierTotalCollected).toFixed(2));
+
+  // TOTAL EXPENSES & SALARIES
+  const totalExpensesAmount = useMemo(() => {
+    return (expenses || []).reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  }, [expenses]);
+
+  // FINAL TRUE NET CASH PROFIT AFTER ALL EXPENSES AND SALARIES
+  const finalTrueNetProfit = Number((combinedRealizedTotalNetProfit - totalExpensesAmount).toFixed(2));
 
   if (!isOpen) return null;
 
@@ -1876,34 +1890,51 @@ export function SecretProfitVaultModal({
 
                 </div>
 
-                {/* Grand Combined Business Overview */}
-                <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-slate-900 to-indigo-950/90 border border-emerald-500/50 space-y-3 shadow-xl">
+                {/* Grand Combined Business Overview with Expenses & True Net Profit */}
+                <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-slate-900 to-indigo-950/90 border border-emerald-500/50 space-y-4 shadow-xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-amber-400" />
                       <h4 className="text-sm font-black text-white">🌟 إجمالي أرباح البيزنس الشامل (مبيعات الجملة + تحصيلات الشحن القطاعي)</h4>
                     </div>
-                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30">
-                      محصل كاش في الخزينة
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {onOpenExpensesModal && (
+                        <button
+                          onClick={onOpenExpensesModal}
+                          className="text-xs font-bold text-rose-300 hover:text-white bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 px-2.5 py-1 rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <DollarSign className="w-3.5 h-3.5 text-rose-400" />
+                          <span>إدارة المصروفات</span>
+                        </button>
+                      )}
+                      <span className="text-xs font-bold text-emerald-400 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30">
+                        محصل كاش في الخزينة
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-center">
                     <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800">
                       <span className="text-[10px] text-slate-400 block mb-1">إجمالي الكاش المحصل</span>
-                      <span className="text-base font-black text-white font-mono">{combinedTotalCashCollected.toLocaleString()} ج.م</span>
+                      <span className="text-sm sm:text-base font-black text-white font-mono">{combinedTotalCashCollected.toLocaleString()} ج.م</span>
                     </div>
                     <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800">
                       <span className="text-[10px] text-slate-400 block mb-1">أرباح الشركة المحصلة</span>
-                      <span className="text-base font-black text-emerald-400 font-mono">+{combinedRealizedCompanyProfit.toLocaleString()} ج.م</span>
+                      <span className="text-sm sm:text-base font-black text-emerald-400 font-mono">+{combinedRealizedCompanyProfit.toLocaleString()} ج.م</span>
                     </div>
                     <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800">
                       <span className="text-[10px] text-slate-400 block mb-1">أرباح المصنع المحصلة</span>
-                      <span className="text-base font-black text-cyan-400 font-mono">+{combinedRealizedFactoryProfit.toLocaleString()} ج.م</span>
+                      <span className="text-sm sm:text-base font-black text-cyan-400 font-mono">+{combinedRealizedFactoryProfit.toLocaleString()} ج.م</span>
                     </div>
-                    <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/40">
-                      <span className="text-[10px] text-amber-300 block mb-1 font-bold">صافي الأرباح الكلية (في الجيب)</span>
-                      <span className="text-lg font-black text-amber-300 font-mono">+{combinedRealizedTotalNetProfit.toLocaleString()} ج.م</span>
+                    <div className="p-3 bg-rose-950/40 rounded-xl border border-rose-700/40">
+                      <span className="text-[10px] text-rose-300 block mb-1 font-bold">(-) المصروفات والرواتب</span>
+                      <span className="text-sm sm:text-base font-black text-rose-400 font-mono">-{totalExpensesAmount.toLocaleString()} ج.م</span>
+                    </div>
+                    <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/50 col-span-2 sm:col-span-1">
+                      <span className="text-[10px] text-amber-300 block mb-1 font-bold">✨ صافي الربح الفعلي بعد المصروفات</span>
+                      <span className={`text-base sm:text-lg font-black font-mono ${finalTrueNetProfit >= 0 ? 'text-amber-300' : 'text-rose-400'}`}>
+                        {finalTrueNetProfit >= 0 ? `+${finalTrueNetProfit.toLocaleString()}` : `${finalTrueNetProfit.toLocaleString()}`} ج.م
+                      </span>
                     </div>
                   </div>
                 </div>

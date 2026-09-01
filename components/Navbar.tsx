@@ -13,7 +13,9 @@ import {
   Database,
   UserCheck,
   Lock,
-  Truck
+  Truck,
+  DollarSign,
+  TrendingDown
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -24,10 +26,12 @@ interface NavbarProps {
   onOpenTeamManagement: () => void;
   onOpenSecretVault: () => void;
   onOpenCourierSettlements: () => void;
+  onOpenExpensesPayroll: () => void;
   onExportCSV: () => void;
   onClearData: () => void;
   invoicesCount: number;
   courierCount?: number;
+  expensesCount?: number;
 }
 
 export function Navbar({
@@ -37,10 +41,12 @@ export function Navbar({
   onOpenTeamManagement,
   onOpenSecretVault,
   onOpenCourierSettlements,
+  onOpenExpensesPayroll,
   onExportCSV,
   onClearData,
   invoicesCount,
   courierCount = 0,
+  expensesCount = 0,
 }: NavbarProps) {
   const { user, logout, projectId } = useAuth();
 
@@ -69,22 +75,38 @@ export function Navbar({
                 </span>
               </div>
               <p className="text-xs text-slate-500 hidden sm:block">
-                متابعة مبيعات المنظفات، حسابات العملاء والديون المستحقة
+                متابعة مبيعات المنظفات، حسابات العملاء، الشحن والمصروفات
               </p>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             
             {/* Secret Profit Vault VIP Button */}
             <button
               onClick={onOpenSecretVault}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-amber-300 bg-slate-950 hover:bg-slate-900 border border-amber-500/40 rounded-xl transition-all shadow-sm hover:shadow-amber-500/10 cursor-pointer"
-              title="خزنة الأرباح السرية وهوامش التكلفة (وصول مخصص)"
+              title="خزنة الأرباح السرية وهوامش التكلفة وصافي الأرباح (وصول مخصص)"
             >
               <Lock className="w-4 h-4 text-amber-400" />
               <span className="hidden sm:inline">خزنة الأرباح</span>
+            </button>
+
+            {/* Expenses & Payroll Button */}
+            <button
+              onClick={onOpenExpensesPayroll}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer"
+              title="إدارة المصروفات التشغيلية ورواتب الموظفين"
+            >
+              <DollarSign className="w-4 h-4 text-rose-600" />
+              <span className="hidden md:inline">المصروفات والرواتب</span>
+              <span className="md:hidden">المصروفات</span>
+              {expensesCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-bold">
+                  {expensesCount}
+                </span>
+              )}
             </button>
 
             {/* Courier & Retail Settlements Button */}
@@ -94,8 +116,8 @@ export function Navbar({
               title="تحصيلات شركات الشحن ومبيعات القطاعي"
             >
               <Truck className="w-4 h-4 text-indigo-600" />
-              <span className="hidden md:inline">تحصيلات الشحن والقطاعي</span>
-              <span className="md:hidden">الشحن</span>
+              <span className="hidden lg:inline">تحصيلات الشحن والقطاعي</span>
+              <span className="lg:hidden">الشحن</span>
               {courierCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-bold">
                   {courierCount}
@@ -106,27 +128,27 @@ export function Navbar({
             {/* Team / Admins Management */}
             <button
               onClick={onOpenTeamManagement}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer"
               title="إدارة الحسابات والمدراء المصرح لهم بالتعديل"
             >
               <UserCheck className="w-4 h-4 text-teal-700" />
-              <span className="hidden md:inline">المدراء</span>
+              <span className="hidden lg:inline">المدراء</span>
             </button>
 
             {/* Catalog */}
             <button
               onClick={onOpenCatalog}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
               title="دليل الأسعار والمنتجات"
             >
               <Package className="w-4 h-4 text-slate-600" />
-              <span className="hidden md:inline">المنتجات والأسعار</span>
+              <span className="hidden lg:inline">المنتجات والأسعار</span>
             </button>
 
             {/* Customers Ledger */}
             <button
               onClick={onOpenCustomerLedger}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
               title="كشف حسابات العملاء"
             >
               <Users className="w-4 h-4 text-teal-600" />
@@ -158,14 +180,14 @@ export function Navbar({
               className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-sm shadow-emerald-600/30 transition-all cursor-pointer"
             >
               <FilePlus className="w-4 h-4" />
-              <span>فاتورة جديدة</span>
+              <span className="whitespace-nowrap">فاتورة جديدة</span>
             </button>
 
             {/* Admin User badge & Logout */}
             {user && (
               <div className="flex items-center gap-1.5 pl-1 border-r border-slate-200 mr-1 pr-2">
-                <div className="hidden lg:flex flex-col text-right leading-tight">
-                  <span className="text-xs font-bold text-slate-800 truncate max-w-[130px]" title={user.email || ''}>
+                <div className="hidden xl:flex flex-col text-right leading-tight">
+                  <span className="text-xs font-bold text-slate-800 truncate max-w-[120px]" title={user.email || ''}>
                     {user.displayName || user.email?.split('@')[0] || 'المدير'}
                   </span>
                   <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
