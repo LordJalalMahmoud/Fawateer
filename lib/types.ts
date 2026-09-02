@@ -35,6 +35,11 @@ export interface Invoice {
   remainingAmount: number;
   status: PaymentStatus;
   notes?: string;
+  // مندوب المبيعات والعمولة المربوطة بالفاتورة
+  salesEmployeeId?: string;
+  salesEmployeeName?: string;
+  commissionRate?: number; // نسبة العمولة % (مثال: 2 يعني 2%)
+  commissionAmount?: number; // قيمة العمولة المحسوبة بالجنيه
   createdAt: string;
   updatedAt: string;
 }
@@ -257,6 +262,7 @@ export interface Employee {
   phone?: string;
   baseSalary: number; // الراتب الأساسي الشهري
   fixedAllowances?: number; // بدلات ثابتة (انتقال، وجبة، إلخ)
+  defaultCommissionRate?: number; // نسبة العمولة الافتراضية (%) لمندوبي المبيعات
   status: 'ACTIVE' | 'ON_LEAVE' | 'RESIGNED';
   joinDate?: string;
   notes?: string;
@@ -272,9 +278,11 @@ export interface SalaryPaymentRecord {
   paymentDate: string; // YYYY-MM-DD
   baseSalary: number;
   allowances: number; // بدلات
+  commissions?: number; // عمولات المبيعات المحسوبة من الفواتير
+  commissionInvoicesCount?: number; // عدد فواتير العمولات المشمولة
   bonuses: number; // حوافز ومكافآت
   deductions: number; // خصومات وسلف
-  netPaid: number; // صافي الراتب المصروف
+  netPaid: number; // صافي الراتب المصروف (الأساسي + البدلات + العمولات + الحوافز - الخصومات)
   paymentMethod: PaymentMethod;
   expenseId?: string; // رابط مع سجل المصروفات العام
   notes?: string;

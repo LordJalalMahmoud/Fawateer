@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Invoice, InvoiceItem, PaymentStatus, ProductCatalogItem } from '@/lib/types';
+import { Invoice, InvoiceItem, PaymentStatus, ProductCatalogItem, Employee } from '@/lib/types';
 import { 
   X, 
   Plus, 
@@ -12,7 +12,10 @@ import {
   Package, 
   CreditCard,
   Percent,
-  Edit2
+  Edit2,
+  Award,
+  CheckCircle2,
+  Briefcase
 } from 'lucide-react';
 
 interface InvoiceModalProps {
@@ -22,6 +25,7 @@ interface InvoiceModalProps {
   initialInvoice?: Invoice | null;
   existingInvoices: Invoice[];
   productCatalog: ProductCatalogItem[];
+  employees?: Employee[];
 }
 
 let idCounter = 0;
@@ -61,6 +65,7 @@ function InvoiceModalContent({
   initialInvoice,
   existingInvoices,
   productCatalog,
+  employees = [],
 }: Omit<InvoiceModalProps, 'isOpen'>) {
   const currentYear = new Date().getFullYear();
   const nextNum = existingInvoices.length + 1;
@@ -80,6 +85,21 @@ function InvoiceModalContent({
   const [customerAddress, setCustomerAddress] = useState(
     initialInvoice?.customerAddress || ''
   );
+
+  // Sales Rep & Commission
+  const [salesEmployeeId, setSalesEmployeeId] = useState<string>(
+    initialInvoice?.salesEmployeeId || ''
+  );
+  const [salesEmployeeName, setSalesEmployeeName] = useState<string>(
+    initialInvoice?.salesEmployeeName || ''
+  );
+  const [commissionRate, setCommissionRate] = useState<number>(
+    initialInvoice?.commissionRate ?? 0
+  );
+  const [commissionAmount, setCommissionAmount] = useState<number>(
+    initialInvoice?.commissionAmount ?? 0
+  );
+  const [isManualCommission, setIsManualCommission] = useState<boolean>(false);
 
   const [items, setItems] = useState<InvoiceItem[]>(() => {
     if (initialInvoice && initialInvoice.items && initialInvoice.items.length > 0) {
@@ -167,6 +187,31 @@ function InvoiceModalContent({
   const totalAmount = Number((subtotal + calculatedTax - Number(discount || 0)).toFixed(2));
   const remainingAmount = Number((totalAmount - Number(paidAmount || 0)).toFixed(2));
 
+  // Commission calculation
+  const autoCalculatedCommission = commissionRate > 0 && totalAmount > 0
+    ? Math.round(((totalAmount * commissionRate) / 100) * 100) / 100
+    : 0;
+  const finalCommissionAmount = isManualCommission ? Number(commissionAmount || 0) : autoCalculatedCommission;
+
+  const handleSelectEmployee = (empId: string) => {
+    setSalesEmployeeId(empId);
+    if (!empId) {
+      setSalesEmployeeName('');
+      setCommissionRate(0);
+      setCommissionAmount(0);
+      setIsManualCommission(false);
+      return;
+    }
+    const emp = employees.find(e => e.id === empId);
+    if (emp) {
+      setSalesEmployeeName(emp.name);
+      if (emp.defaultCommissionRate && emp.defaultCommissionRate > 0) {
+        setCommissionRate(emp.defaultCommissionRate);
+        setIsManualCommission(false);
+      }
+    }
+  };
+
   // Determine status
   let status: PaymentStatus = 'UNPAID';
   if (paidAmount >= totalAmount && totalAmount > 0) {
@@ -211,6 +256,10 @@ function InvoiceModalContent({
       remainingAmount,
       status,
       notes: notes.trim() || '',
+      salesEmployeeId: salesEmployeeId || undefined,
+      salesEmployeeName: salesEmployeeName.trim() || undefined,
+      commissionRate: commissionRate > 0 ? commissionRate : undefined,
+      commissionAmount: finalCommissionAmount > 0 ? finalCommissionAmount : undefined,
       createdAt: timestamp,
       updatedAt: nowIso,
     };
@@ -515,6 +564,90 @@ function InvoiceModalContent({
           </div>
         </div>
 
+        {/* Section 2.5: Sales Representative & Commission Attribution */}
+        <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-xl p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+              <Award className="w-4 h-4 text-indigo-600" />
+              <span>مندوب المبيعات ونسبة العمولة للموظف</span>
+            </h3>
+            <span className="text-[11px] text-indigo-700 bg-indigo-100/80 font-semibold px-2.5 py-0.5 rounded-full">
+              تُحسب تلقائياً وتُرحل لراتب الموظف في مسير الرواتب
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            {/* Employee Selector */}
+            <div className="sm:col-span-6">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                الموظف / مندوب المبيعات المسئول
+              </label>
+              <select
+                value={salesEmployeeId}
+                onChange={(e) => handleSelectEmployee(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800"
+              >
+                <option value="">-- بدون مندوب مبيعات (بيع مباشر بالمخزن) --</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} ({emp.jobTitle}) {emp.defaultCommissionRate ? `[عمولة افتراضية: ${emp.defaultCommissionRate}%]` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Commission Rate % */}
+            <div className="sm:col-span-3">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                نسبة العمولة (%)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  placeholder="مثال: 2"
+                  value={commissionRate || ''}
+                  onChange={(e) => {
+                    setCommissionRate(parseFloat(e.target.value) || 0);
+                    setIsManualCommission(false);
+                  }}
+                  className="w-full pl-7 pr-3 py-2 text-sm bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono font-bold text-indigo-900 text-left"
+                />
+                <Percent className="w-3.5 h-3.5 text-indigo-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
+
+            {/* Calculated Commission Amount */}
+            <div className="sm:col-span-3">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                قيمة العمولة المستحقة
+              </label>
+              <div className="flex items-center gap-1.5">
+                <div className="flex-1 px-3 py-2 bg-white border border-indigo-200 rounded-lg text-sm font-black text-indigo-900 font-mono text-left flex items-center justify-between">
+                  <span>ج.م</span>
+                  <span>{finalCommissionAmount.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {salesEmployeeName && finalCommissionAmount > 0 && (
+            <div className="text-xs text-indigo-900 bg-white/90 p-2.5 rounded-lg border border-indigo-200/70 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  مستحق للموظف: <strong>{salesEmployeeName}</strong> عمولة <strong>{finalCommissionAmount.toLocaleString()} ج.م</strong> ({commissionRate}% من إجمالي الفاتورة {totalAmount.toLocaleString()} ج.م)
+                </span>
+              </div>
+              <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
+                مربوط بمسير الرواتب
+              </span>
+            </div>
+          )}
+        </div>
+
         {/* Section 3: Summary & Financial Adjustments */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           
@@ -614,6 +747,19 @@ function InvoiceModalContent({
               </span>
             </div>
 
+            {/* Commission Summary if assigned */}
+            {salesEmployeeName && finalCommissionAmount > 0 && (
+              <div className="pt-2 border-t border-indigo-100 flex items-center justify-between text-xs bg-indigo-50/70 p-2 rounded-lg text-indigo-900 font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>عمولة المبيعات المستحقة للموظف ({salesEmployeeName}):</span>
+                </span>
+                <span className="font-bold font-mono text-indigo-700">
+                  {commissionRate ? `${commissionRate}% = ` : ''}{finalCommissionAmount.toLocaleString()} ج.م
+                </span>
+              </div>
+            )}
+
           </div>
 
         </div>
@@ -659,6 +805,7 @@ export function InvoiceModal(props: InvoiceModalProps) {
         initialInvoice={props.initialInvoice}
         existingInvoices={props.existingInvoices}
         productCatalog={props.productCatalog}
+        employees={props.employees}
       />
     </div>
   );

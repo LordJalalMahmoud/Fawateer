@@ -320,6 +320,17 @@ export function CustomerLedgerModal({
                               >
                                 <span>كشف حساب</span>
                               </button>
+
+                              {onOpenCustomerProductsSummary && (
+                                <button
+                                  onClick={() => onOpenCustomerProductsSummary(client.name)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                                  title="عرض إجمالي ما طلبه هذا العميل من كل منتج بالتفصيل"
+                                >
+                                  <Package className="w-3.5 h-3.5 text-teal-600" />
+                                  <span>مسحوبات الأصناف</span>
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

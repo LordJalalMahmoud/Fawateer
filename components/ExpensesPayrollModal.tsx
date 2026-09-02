@@ -37,10 +37,12 @@ import {
   Clock,
   ArrowDownRight,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Percent
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ExpenseItem, Employee, SalaryPaymentRecord, ExpenseCategory, PaymentMethod } from '@/lib/types';
+import { ExpenseItem, Employee, SalaryPaymentRecord, ExpenseCategory, PaymentMethod, Invoice } from '@/lib/types';
+import { getMonthlyCommissionsOverview, getEmployeeCommissionStats } from '@/lib/commission-analytics';
 
 interface ExpensesPayrollModalProps {
   isOpen: boolean;
@@ -48,6 +50,7 @@ interface ExpensesPayrollModalProps {
   expenses: ExpenseItem[];
   employees: Employee[];
   salaryPayments: SalaryPaymentRecord[];
+  invoices?: Invoice[];
   onSaveExpense: (expense: ExpenseItem) => Promise<void>;
   onDeleteExpense: (expenseId: string) => Promise<void>;
   onSaveEmployee: (employee: Employee) => Promise<void>;
@@ -85,6 +88,7 @@ export function ExpensesPayrollModal({
   expenses = [],
   employees = [],
   salaryPayments = [],
+  invoices = [],
   onSaveExpense,
   onDeleteExpense,
   onSaveEmployee,
@@ -139,6 +143,7 @@ export function ExpensesPayrollModal({
   const [empPhone, setEmpPhone] = useState('');
   const [empBaseSalary, setEmpBaseSalary] = useState<number | ''>('');
   const [empFixedAllowances, setEmpFixedAllowances] = useState<number | ''>('');
+  const [empDefaultCommissionRate, setEmpDefaultCommissionRate] = useState<number | ''>('');
   const [empStatus, setEmpStatus] = useState<'ACTIVE' | 'ON_LEAVE' | 'RESIGNED'>('ACTIVE');
   const [empJoinDate, setEmpJoinDate] = useState(new Date().toISOString().slice(0, 10));
   const [empNotes, setEmpNotes] = useState('');
@@ -150,6 +155,8 @@ export function ExpensesPayrollModal({
   const [salBaseSalary, setSalBaseSalary] = useState<number>(0);
   const [salAllowances, setSalAllowances] = useState<number>(0);
   const [salBonuses, setSalBonuses] = useState<number>(0);
+  const [salCommissions, setSalCommissions] = useState<number>(0);
+  const [salCommissionInvoicesCount, setSalCommissionInvoicesCount] = useState<number>(0);
   const [salDeductions, setSalDeductions] = useState<number>(0);
   const [salPaymentMethod, setSalPaymentMethod] = useState<PaymentMethod>('CASH');
   const [salNotes, setSalNotes] = useState('');
@@ -220,6 +227,11 @@ export function ExpensesPayrollModal({
     return activeEmployees.reduce((sum, e) => sum + Number(e.baseSalary || 0) + Number(e.fixedAllowances || 0), 0);
   }, [activeEmployees]);
 
+  // Commissions calculated for each employee for selected month
+  const monthlyCommissionsMap = useMemo(() => {
+    return getMonthlyCommissionsOverview(invoices, employees, selectedPayrollMonth).byEmployee;
+  }, [invoices, employees, selectedPayrollMonth]);
+
   // Payroll for selected month
   const monthPayrollData = useMemo(() => {
     return employees.map(emp => {
@@ -229,9 +241,21 @@ export function ExpensesPayrollModal({
       const baseSalary = Number(emp.baseSalary || 0);
       const allowances = Number(emp.fixedAllowances || 0);
       const isPaid = Boolean(existingPayment);
+
+      const commStats = monthlyCommissionsMap.get(emp.id);
+      const calculatedCommissions = commStats?.totalCommissions || 0;
+      const calculatedInvoicesCount = commStats?.invoicesCount || 0;
+
+      const commissions = existingPayment?.commissions !== undefined 
+        ? Number(existingPayment.commissions) 
+        : calculatedCommissions;
+      const commissionInvoicesCount = existingPayment?.commissionInvoicesCount !== undefined
+        ? Number(existingPayment.commissionInvoicesCount)
+        : calculatedInvoicesCount;
+
       const netCalculated = existingPayment
         ? existingPayment.netPaid
-        : Math.max(0, baseSalary + allowances);
+        : Math.max(0, baseSalary + allowances + commissions);
 
       return {
         employee: emp,
@@ -239,21 +263,27 @@ export function ExpensesPayrollModal({
         isPaid,
         baseSalary,
         allowances,
+        commissions,
+        commissionInvoicesCount,
         netPaid: netCalculated,
         status: isPaid ? 'PAID' : 'UNPAID',
       };
     });
-  }, [employees, salaryPayments, selectedPayrollMonth]);
+  }, [employees, salaryPayments, selectedPayrollMonth, monthlyCommissionsMap]);
 
   const monthPayrollSummary = useMemo(() => {
     let totalObligation = 0;
     let totalPaid = 0;
+    let totalCommissions = 0;
+    let commissionInvoicesCount = 0;
     let paidCount = 0;
     let unpaidCount = 0;
 
     monthPayrollData.forEach(item => {
       if (item.employee.status === 'ACTIVE') {
-        totalObligation += item.baseSalary + item.allowances;
+        totalObligation += item.baseSalary + item.allowances + item.commissions;
+        totalCommissions += item.commissions;
+        commissionInvoicesCount += item.commissionInvoicesCount;
       }
       if (item.isPaid && item.payment) {
         totalPaid += item.payment.netPaid;
@@ -266,6 +296,8 @@ export function ExpensesPayrollModal({
     return {
       totalObligation,
       totalPaid,
+      totalCommissions,
+      commissionInvoicesCount,
       remainingUnpaid: Math.max(0, totalObligation - totalPaid),
       paidCount,
       unpaidCount,
@@ -338,6 +370,7 @@ export function ExpensesPayrollModal({
     setEmpPhone('');
     setEmpBaseSalary('');
     setEmpFixedAllowances('');
+    setEmpDefaultCommissionRate('');
     setEmpStatus('ACTIVE');
     setEmpJoinDate(new Date().toISOString().slice(0, 10));
     setEmpNotes('');
@@ -352,6 +385,7 @@ export function ExpensesPayrollModal({
     setEmpPhone(emp.phone || '');
     setEmpBaseSalary(emp.baseSalary);
     setEmpFixedAllowances(emp.fixedAllowances || '');
+    setEmpDefaultCommissionRate(emp.defaultCommissionRate ?? '');
     setEmpStatus(emp.status);
     setEmpJoinDate(emp.joinDate || new Date().toISOString().slice(0, 10));
     setEmpNotes(emp.notes || '');
@@ -373,6 +407,7 @@ export function ExpensesPayrollModal({
         phone: empPhone.trim() || undefined,
         baseSalary: Number(empBaseSalary),
         fixedAllowances: Number(empFixedAllowances) || 0,
+        defaultCommissionRate: empDefaultCommissionRate === '' ? undefined : Number(empDefaultCommissionRate),
         status: empStatus,
         joinDate: empJoinDate,
         notes: empNotes.trim() || undefined,
@@ -390,6 +425,7 @@ export function ExpensesPayrollModal({
 
   // Handlers: Open Salary Disbursement for single employee
   const handleOpenDisburseSalary = (emp: Employee) => {
+    const stats = getEmployeeCommissionStats(invoices, emp.id, selectedPayrollMonth);
     const existing = salaryPayments.find(p => p.employeeId === emp.id && p.month === selectedPayrollMonth);
     setDisbursingEmployee(emp);
     setSalMonth(selectedPayrollMonth);
@@ -397,6 +433,8 @@ export function ExpensesPayrollModal({
     setSalBaseSalary(existing ? existing.baseSalary : Number(emp.baseSalary || 0));
     setSalAllowances(existing ? existing.allowances : Number(emp.fixedAllowances || 0));
     setSalBonuses(existing ? existing.bonuses : 0);
+    setSalCommissions(existing?.commissions !== undefined ? existing.commissions : stats.totalCommissions);
+    setSalCommissionInvoicesCount(existing?.commissionInvoicesCount !== undefined ? existing.commissionInvoicesCount : stats.invoicesCount);
     setSalDeductions(existing ? existing.deductions : 0);
     setSalPaymentMethod(existing ? existing.paymentMethod : 'CASH');
     setSalNotes(existing?.notes || '');
@@ -410,7 +448,7 @@ export function ExpensesPayrollModal({
 
     setIsSubmittingSalary(true);
     try {
-      const netToPay = Math.max(0, salBaseSalary + salAllowances + salBonuses - salDeductions);
+      const netToPay = Math.max(0, salBaseSalary + salAllowances + salBonuses + salCommissions - salDeductions);
       const nowIso = new Date().toISOString();
       const existing = salaryPayments.find(p => p.employeeId === disbursingEmployee.id && p.month === salMonth);
 
@@ -424,6 +462,8 @@ export function ExpensesPayrollModal({
         baseSalary: salBaseSalary,
         allowances: salAllowances,
         bonuses: salBonuses,
+        commissions: salCommissions,
+        commissionInvoicesCount: salCommissionInvoicesCount,
         deductions: salDeductions,
         netPaid: netToPay,
         paymentMethod: salPaymentMethod,
@@ -1065,6 +1105,13 @@ export function ExpensesPayrollModal({
                             </div>
                           )}
 
+                          {emp.defaultCommissionRate !== undefined && emp.defaultCommissionRate > 0 && (
+                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-indigo-300 bg-indigo-950/40 border border-indigo-800/40 px-2.5 py-1 rounded-lg">
+                              <Percent className="w-3 h-3 text-indigo-400" />
+                              <span>نسبة عمولة افتراضية: <strong className="font-mono text-indigo-200">{emp.defaultCommissionRate}%</strong></span>
+                            </div>
+                          )}
+
                           {emp.notes && (
                             <p className="mt-2 text-[11px] text-slate-400 bg-slate-900 p-2 rounded-lg border border-slate-800">
                               {emp.notes}
@@ -1136,11 +1183,22 @@ export function ExpensesPayrollModal({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4 text-xs font-medium">
+                <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
                   <div className="bg-slate-900 border border-slate-800 px-3.5 py-2 rounded-xl">
                     <span className="text-slate-400 block">إجمالي استحقاقات الشهر:</span>
                     <span className="text-white font-mono font-bold text-sm">
                       {monthPayrollSummary.totalObligation.toLocaleString()} ج.م
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900 border border-indigo-900/60 px-3.5 py-2 rounded-xl">
+                    <span className="text-indigo-400 block flex items-center gap-1">
+                      <Award className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>عمولات الفواتير المحققة:</span>
+                    </span>
+                    <span className="text-indigo-300 font-mono font-bold text-sm">
+                      {monthPayrollSummary.totalCommissions.toLocaleString()} ج.م
+                      <span className="text-[10px] text-slate-400 font-sans font-normal mr-1.5">({monthPayrollSummary.commissionInvoicesCount} فاتورة)</span>
                     </span>
                   </div>
 
@@ -1176,6 +1234,7 @@ export function ExpensesPayrollModal({
                           <th className="py-3 px-4 text-left font-mono">الأساسي</th>
                           <th className="py-3 px-4 text-left font-mono">البدلات</th>
                           <th className="py-3 px-4 text-left font-mono">المكافآت</th>
+                          <th className="py-3 px-4 text-left font-mono">عمولات المبيعات</th>
                           <th className="py-3 px-4 text-left font-mono">الخصومات والسلف</th>
                           <th className="py-3 px-4 text-left font-mono">صافي المستحق</th>
                           <th className="py-3 px-4 text-center">حالة الصرف</th>
@@ -1183,7 +1242,7 @@ export function ExpensesPayrollModal({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-medium">
-                        {monthPayrollData.map(({ employee, payment, isPaid, baseSalary, allowances, netPaid }) => {
+                        {monthPayrollData.map(({ employee, payment, isPaid, baseSalary, allowances, commissions, commissionInvoicesCount, netPaid }) => {
                           return (
                             <tr key={employee.id} className="hover:bg-slate-900/60 transition-colors">
                               <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
@@ -1193,7 +1252,13 @@ export function ExpensesPayrollModal({
                                 )}
                               </td>
                               <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
-                                {employee.jobTitle}
+                                <div>{employee.jobTitle}</div>
+                                {employee.defaultCommissionRate !== undefined && employee.defaultCommissionRate > 0 && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-indigo-400 font-mono">
+                                    <Percent className="w-2.5 h-2.5" />
+                                    <span>{employee.defaultCommissionRate}% عمولة</span>
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3 px-4 text-left font-mono text-slate-300">
                                 {baseSalary.toLocaleString()} ج
@@ -1203,6 +1268,16 @@ export function ExpensesPayrollModal({
                               </td>
                               <td className="py-3 px-4 text-left font-mono text-purple-400">
                                 {payment && payment.bonuses > 0 ? `+${payment.bonuses.toLocaleString()} ج` : '—'}
+                              </td>
+                              <td className="py-3 px-4 text-left font-mono">
+                                {commissions > 0 ? (
+                                  <div>
+                                    <span className="font-bold text-indigo-400">+{commissions.toLocaleString()} ج</span>
+                                    <span className="block text-[10px] text-slate-400 font-sans">{commissionInvoicesCount} فاتورة</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-600">—</span>
+                                )}
                               </td>
                               <td className="py-3 px-4 text-left font-mono text-rose-400">
                                 {payment && payment.deductions > 0 ? `-${payment.deductions.toLocaleString()} ج` : '—'}
@@ -1241,7 +1316,7 @@ export function ExpensesPayrollModal({
                       </tbody>
                       <tfoot className="bg-slate-900/95 font-bold text-white border-t-2 border-slate-700">
                         <tr>
-                          <td colSpan={6} className="py-3 px-4 text-left">
+                          <td colSpan={7} className="py-3 px-4 text-left">
                             إجمالي ما تم صرفه لهذا الشهر ({selectedPayrollMonth}):
                           </td>
                           <td className="py-3 px-4 text-left font-mono text-base text-emerald-400">
@@ -1630,6 +1705,33 @@ export function ExpensesPayrollModal({
                 </div>
               </div>
 
+              {/* Default Commission Rate Input */}
+              <div className="p-3 bg-slate-950/80 border border-indigo-900/40 rounded-xl">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="text-xs text-indigo-300 font-semibold flex items-center gap-1">
+                    <Percent className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>نسبة العمولة الافتراضية على المبيعات (%)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">خاصة بمندوبي المبيعات</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={empDefaultCommissionRate}
+                    onChange={e => setEmpDefaultCommissionRate(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="مثال: 2 أو 3.5"
+                    className="w-full bg-slate-900 border border-slate-700 text-indigo-200 font-mono text-xs rounded-xl pr-3 pl-8 py-2 outline-none focus:border-indigo-500"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">%</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  تُقترح تلقائياً في خانة العمولة عند ربط هذا الموظف بفاتورة مبيعات جديدة أو بضاعة مرسلة
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-300 font-semibold block mb-1">حالة العمل</label>
@@ -1769,7 +1871,7 @@ export function ExpensesPayrollModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-300 font-semibold block mb-1">+ حوافز ومكافآت (ج.م)</label>
+                  <label className="text-xs text-slate-300 font-semibold block mb-1">+ حوافز ومكافآت إضافية (ج.م)</label>
                   <input
                     type="number"
                     min="0"
@@ -1795,15 +1897,54 @@ export function ExpensesPayrollModal({
                 </div>
               </div>
 
-              {/* Calculated Net Salary Box */}
-              <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/60 flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-purple-300 block font-semibold">صافي المبلغ المدفوع للموظف:</span>
-                  <span className="text-xl font-bold font-mono text-white">
-                    {Math.max(0, salBaseSalary + salAllowances + salBonuses - salDeductions).toLocaleString()} ج.م
+              {/* Commission Section */}
+              <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-800/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-indigo-400" />
+                    <span>+ عمولات مبيعات الفواتير لهذا الشهر</span>
+                  </span>
+                  <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-900/60 border border-indigo-700/50 px-2 py-0.5 rounded-md">
+                    {salCommissionInvoicesCount} فاتورة مبيعات
                   </span>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                  <div>
+                    <label className="text-[11px] text-slate-300 block mb-1 font-medium">مبلغ العمولة المضافة للراتب (ج.م)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={salCommissions}
+                      onChange={e => setSalCommissions(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-indigo-600 text-indigo-300 font-mono font-bold text-sm rounded-xl px-3 py-2 outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                  <div className="text-[11px] text-slate-400 leading-relaxed bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                    تم احتسابها آلياً من نسبة العمولات على فواتير المبيعات المنسوبة للموظف خلال شهر <span className="text-indigo-300 font-mono font-bold">{salMonth}</span>. يمكنك تعديلها يدوياً إذا رغبت.
+                  </div>
+                </div>
+              </div>
+
+              {/* Calculated Net Salary Box */}
+              <div className="p-3.5 rounded-xl bg-purple-950/40 border border-purple-800/60 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-purple-300 block font-semibold">صافي المبلغ المدفوع للموظف:</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold font-mono text-white">
+                      {Math.max(0, salBaseSalary + salAllowances + salBonuses + salCommissions - salDeductions).toLocaleString()} ج.م
+                    </span>
+                    {salCommissions > 0 && (
+                      <span className="text-[11px] text-indigo-300 font-medium">
+                        (شامل {salCommissions.toLocaleString()} ج عمولات)
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    الأساسي ({salBaseSalary}) + البدلات ({salAllowances}) + الحوافز ({salBonuses}) + العمولات ({salCommissions}) - الخصومات ({salDeductions})
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300 shrink-0">
                   <CheckCircle2 className="w-5 h-5" />
                 </div>
               </div>

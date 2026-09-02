@@ -17,7 +17,8 @@ import {
   FileText,
   CreditCard,
   QrCode,
-  Edit3
+  Edit3,
+  Award
 } from 'lucide-react';
 
 interface InvoiceViewModalProps {
@@ -238,6 +239,15 @@ export function InvoiceViewModal({
                       {isPaid ? 'مسددة' : isPartial ? 'سداد جزئي' : 'غير مسددة'}
                     </span>
                   </div>
+                  {invoice.salesEmployeeName && (
+                    <div className="text-xs text-slate-600 mt-1.5 pt-1.5 border-t border-slate-200 flex items-center justify-between gap-2">
+                      <span>المندوب:</span>
+                      <span className="font-bold text-indigo-900 flex items-center gap-1">
+                        <Award className="w-3 h-3 text-indigo-600" />
+                        {invoice.salesEmployeeName}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -353,6 +363,18 @@ export function InvoiceViewModal({
                       {formatEGP(invoice.remainingAmount)}
                     </span>
                   </div>
+
+                  {invoice.commissionAmount && invoice.commissionAmount > 0 && (
+                    <div className="pt-2 border-t border-indigo-100 flex justify-between text-xs text-indigo-900 bg-indigo-50/70 p-2 rounded-lg font-semibold">
+                      <span className="flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>عمولة المندوب ({invoice.salesEmployeeName || 'الموظف'}):</span>
+                      </span>
+                      <span className="font-bold font-mono">
+                        {invoice.commissionRate ? `${invoice.commissionRate}% = ` : ''}{formatEGP(invoice.commissionAmount)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
               </div>

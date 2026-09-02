@@ -1045,6 +1045,7 @@ function InvoicesDashboard() {
         initialInvoice={editingInvoice}
         existingInvoices={invoices}
         productCatalog={products}
+        employees={employees}
       />
 
       {/* 2. Official Printable Invoice View Modal */}
@@ -1115,6 +1116,7 @@ function InvoicesDashboard() {
         defaultAddress={goodsMerchant.address}
         existingInvoices={invoices}
         productCatalog={products}
+        employees={employees}
         onSaveDelivery={handleSaveDeliveryBatch}
       />
 
@@ -1178,6 +1180,7 @@ function InvoicesDashboard() {
         expenses={expenses}
         employees={employees}
         salaryPayments={salaryPayments}
+        invoices={invoices}
         onSaveExpense={handleSaveExpense}
         onDeleteExpense={handleDeleteExpense}
         onSaveEmployee={handleSaveEmployee}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Invoice, InvoiceItem, PaymentStatus, ProductCatalogItem } from '@/lib/types';
+import { Invoice, InvoiceItem, PaymentStatus, ProductCatalogItem, Employee } from '@/lib/types';
 import { 
   X, 
   Plus, 
@@ -9,7 +9,10 @@ import {
   Save, 
   Package, 
   CreditCard,
-  Building2
+  Building2,
+  Award,
+  Percent,
+  CheckCircle2
 } from 'lucide-react';
 
 interface AddMerchantGoodsModalProps {
@@ -20,6 +23,7 @@ interface AddMerchantGoodsModalProps {
   defaultAddress?: string;
   existingInvoices: Invoice[];
   productCatalog: ProductCatalogItem[];
+  employees?: Employee[];
   onSaveDelivery: (invoice: Invoice) => void;
 }
 
@@ -64,6 +68,7 @@ export function AddMerchantGoodsModal({
   defaultAddress = '',
   existingInvoices,
   productCatalog,
+  employees = [],
   onSaveDelivery,
 }: AddMerchantGoodsModalProps) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -72,7 +77,28 @@ export function AddMerchantGoodsModal({
   const [notes, setNotes] = useState('');
   const [customItemMode, setCustomItemMode] = useState<Record<number, boolean>>({});
 
+  // Sales rep & commission
+  const [salesEmployeeId, setSalesEmployeeId] = useState('');
+  const [salesEmployeeName, setSalesEmployeeName] = useState('');
+  const [commissionRate, setCommissionRate] = useState<number>(0);
+
   if (!isOpen) return null;
+
+  const handleSelectEmployee = (empId: string) => {
+    setSalesEmployeeId(empId);
+    if (!empId) {
+      setSalesEmployeeName('');
+      setCommissionRate(0);
+      return;
+    }
+    const emp = employees.find(e => e.id === empId);
+    if (emp) {
+      setSalesEmployeeName(emp.name);
+      if (emp.defaultCommissionRate && emp.defaultCommissionRate > 0) {
+        setCommissionRate(emp.defaultCommissionRate);
+      }
+    }
+  };
 
   const handleAddItem = () => {
     setItems(prev => [...prev, createEmptyItem()]);
@@ -111,6 +137,10 @@ export function AddMerchantGoodsModal({
   const totalAmount = subtotal;
   const remainingAmount = Math.max(0, Number((totalAmount - Number(paidNow || 0)).toFixed(2)));
 
+  const calculatedCommission = commissionRate > 0 && totalAmount > 0
+    ? Math.round(((totalAmount * commissionRate) / 100) * 100) / 100
+    : 0;
+
   let status: PaymentStatus = 'UNPAID';
   if (paidNow >= totalAmount && totalAmount > 0) {
     status = 'PAID';
@@ -148,6 +178,10 @@ export function AddMerchantGoodsModal({
       remainingAmount,
       status,
       notes: notes.trim() || 'سحب بضاعة للتاجر',
+      salesEmployeeId: salesEmployeeId || undefined,
+      salesEmployeeName: salesEmployeeName.trim() || undefined,
+      commissionRate: commissionRate > 0 ? commissionRate : undefined,
+      commissionAmount: calculatedCommission > 0 ? calculatedCommission : undefined,
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -371,6 +405,71 @@ export function AddMerchantGoodsModal({
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Sales Rep & Commission Attribution */}
+          <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-200/80 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-indigo-600" />
+                <span>مندوب المبيعات المسئول ونسبة العمولة (اختياري)</span>
+              </span>
+              <span className="text-[11px] text-indigo-700 bg-indigo-100/70 font-semibold px-2 py-0.5 rounded-md">
+                تُضاف للراتب الشهري
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+              <div className="sm:col-span-6">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">الموظف / المندوب</label>
+                <select
+                  value={salesEmployeeId}
+                  onChange={(e) => handleSelectEmployee(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-indigo-200 rounded-lg text-slate-800 font-medium"
+                >
+                  <option value="">-- بدون مندوب (سحب مباشر) --</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.jobTitle}) {emp.defaultCommissionRate ? `[${emp.defaultCommissionRate}%]` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">نسبة العمولة (%)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="2"
+                    value={commissionRate || ''}
+                    onChange={(e) => setCommissionRate(parseFloat(e.target.value) || 0)}
+                    className="w-full pl-6 pr-2.5 py-1.5 text-xs bg-white border border-indigo-200 rounded-lg font-bold font-mono text-left text-indigo-900"
+                  />
+                  <Percent className="w-3 h-3 text-indigo-500 absolute left-2 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">العمولة المستحقة</label>
+                <div className="px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-black text-indigo-900 font-mono text-left flex items-center justify-between">
+                  <span>ج.م</span>
+                  <span>{calculatedCommission.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            {salesEmployeeName && calculatedCommission > 0 && (
+              <div className="text-[11px] text-indigo-800 bg-white/90 p-2 rounded border border-indigo-100 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>
+                  عمولة قدرها <strong>{calculatedCommission.toLocaleString()} ج.م</strong> للموظف <strong>{salesEmployeeName}</strong> تُرحل لمسير راتبه.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Payment & Totals */}
