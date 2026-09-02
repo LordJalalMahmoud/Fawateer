@@ -28,6 +28,7 @@ interface MerchantAccountsViewProps {
   onOpenAddGoods: (merchantName: string, phone?: string, address?: string) => void;
   onOpenAddPayment: (merchantName: string, debt: number) => void;
   onOpenStatement: (merchantName: string) => void;
+  onOpenProductsSummary?: (customerName?: string) => void;
 }
 
 export function MerchantAccountsView({
@@ -36,6 +37,7 @@ export function MerchantAccountsView({
   onOpenAddGoods,
   onOpenAddPayment,
   onOpenStatement,
+  onOpenProductsSummary,
 }: MerchantAccountsViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDebtOnly, setFilterDebtOnly] = useState(false);
@@ -174,7 +176,18 @@ export function MerchantAccountsView({
         </div>
 
         {/* Filter Toggle & Add Merchant */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {onOpenProductsSummary && (
+            <button
+              onClick={() => onOpenProductsSummary()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+              title="عرض تقرير شامل لإجمالي ما طلبه كل عميل من كل صنف ومنتج"
+            >
+              <Package className="w-3.5 h-3.5 text-teal-700" />
+              <span>إجمالي مسحوبات الأصناف</span>
+            </button>
+          )}
+
           <button
             onClick={() => setFilterDebtOnly(!filterDebtOnly)}
             className={`px-3.5 py-2 text-xs font-semibold rounded-xl border transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
@@ -320,15 +333,26 @@ export function MerchantAccountsView({
                     </button>
                   </div>
 
-                  {/* Statement & Consolidated Invoice */}
-                  <button
-                    onClick={() => onOpenStatement(merchant.name)}
-                    className="w-full py-2 px-3 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                    title="عرض وطباعة كشف الحساب والفاتورة المجمعة"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-slate-600" />
-                    <span>كشف الحساب والفاتورة المجمعة</span>
-                  </button>
+                  {/* Statement & Consolidated Invoice + Products Demand */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => onOpenStatement(merchant.name)}
+                      className="py-2 px-2 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
+                      title="عرض وطباعة كشف الحساب والفاتورة المجمعة"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-slate-600" />
+                      <span>كشف الحساب</span>
+                    </button>
+
+                    <button
+                      onClick={() => onOpenProductsSummary ? onOpenProductsSummary(merchant.name) : onOpenStatement(merchant.name)}
+                      className="py-2 px-2 text-xs font-bold text-teal-800 bg-teal-50/80 hover:bg-teal-100 border border-teal-200/80 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
+                      title="عرض إجمالي ما طلبه هذا العميل من كل منتج بالتفصيل"
+                    >
+                      <Package className="w-3.5 h-3.5 text-teal-700" />
+                      <span>مسحوبات الأصناف</span>
+                    </button>
+                  </div>
 
                 </div>
 

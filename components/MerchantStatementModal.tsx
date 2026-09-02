@@ -47,6 +47,51 @@ export function MerchantStatementModal({
     return Number((totalPurchases - totalPaid).toFixed(2));
   }, [totalPurchases, totalPaid]);
 
+  // Aggregate product demand for this merchant
+  const aggregatedProducts = useMemo(() => {
+    const map = new Map<string, {
+      name: string;
+      totalQty: number;
+      unit: string;
+      totalAmount: number;
+      count: number;
+      lastPrice: number;
+    }>();
+
+    merchantInvoices.forEach(inv => {
+      (inv.items || []).forEach(item => {
+        const name = (item.name || '').trim();
+        if (!name) return;
+        const qty = Number(item.quantity || 0);
+        const price = Number(item.unitPrice || 0);
+        const total = Number(item.total || (qty * price));
+        const unit = (item.unit || 'قطعة').trim();
+
+        if (!map.has(name)) {
+          map.set(name, {
+            name,
+            totalQty: 0,
+            unit,
+            totalAmount: 0,
+            count: 0,
+            lastPrice: price,
+          });
+        }
+        const p = map.get(name)!;
+        p.totalQty += qty;
+        p.totalAmount += total;
+        p.count += 1;
+        p.lastPrice = price;
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.totalQty - a.totalQty);
+  }, [merchantInvoices]);
+
+  const totalAggregatedUnits = useMemo(() => {
+    return aggregatedProducts.reduce((sum, p) => sum + p.totalQty, 0);
+  }, [aggregatedProducts]);
+
   // Build running balance transactions safely inside useMemo
   const ledgerRows = useMemo(() => {
     return merchantInvoices.map((inv, index) => {
@@ -211,6 +256,77 @@ export function MerchantStatementModal({
               </div>
 
             </div>
+
+            {/* Consolidated Product Demand Summary (إجمالي مسحوبات الأصناف المجمعة للتاجر) */}
+            {aggregatedProducts.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-teal-600"></span>
+                    <span>إجمالي مسحوبات الأصناف والكميات المطلوبة من كل منتج:</span>
+                  </h3>
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    ({aggregatedProducts.length} صنف مسحوب • إجمالي {totalAggregatedUnits.toLocaleString()} عبوة/قطعة)
+                  </span>
+                </div>
+
+                <div className="border border-teal-200/80 rounded-xl overflow-hidden shadow-2xs bg-teal-50/20">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-teal-900 text-white font-bold">
+                      <tr>
+                        <th className="py-2 px-3 w-8">#</th>
+                        <th className="py-2 px-3">اسم المنتج / الصنف</th>
+                        <th className="py-2 px-3 text-center">إجمالي الكمية المطلوبة</th>
+                        <th className="py-2 px-3 text-center">الوحدة</th>
+                        <th className="py-2 px-3 text-left">متوسط السعر</th>
+                        <th className="py-2 px-3 text-left">آخر سعر</th>
+                        <th className="py-2 px-3 text-left">إجمالي القيمة</th>
+                        <th className="py-2 px-3 text-center">عدد الطلبات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-teal-100/60 bg-white">
+                      {aggregatedProducts.map((p, idx) => (
+                        <tr key={p.name} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                          <td className="py-2 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="py-2 px-3 font-bold text-slate-900">{p.name}</td>
+                          <td className="py-2 px-3 text-center">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md font-black text-teal-800 bg-teal-50 border border-teal-200">
+                              {p.totalQty.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-center text-slate-600 font-medium">{p.unit}</td>
+                          <td className="py-2 px-3 text-left font-mono text-slate-700">
+                            {(p.totalAmount / (p.totalQty || 1)).toFixed(2)} ج.م
+                          </td>
+                          <td className="py-2 px-3 text-left font-mono text-slate-600">
+                            {p.lastPrice.toLocaleString()} ج.م
+                          </td>
+                          <td className="py-2 px-3 text-left font-mono font-bold text-emerald-700">
+                            {p.totalAmount.toLocaleString()} ج.م
+                          </td>
+                          <td className="py-2 px-3 text-center text-slate-600 font-mono text-[11px]">
+                            {p.count}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-teal-50 border-t border-teal-200 font-bold text-xs text-teal-950">
+                      <tr>
+                        <td colSpan={2} className="py-2 px-3 text-right">مجموع كميات وقيم الأصناف:</td>
+                        <td className="py-2 px-3 text-center font-black text-teal-900">
+                          {totalAggregatedUnits.toLocaleString()}
+                        </td>
+                        <td colSpan={3}></td>
+                        <td className="py-2 px-3 text-left font-black text-emerald-800">
+                          {totalPurchases.toLocaleString()} ج.م
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Detailed Ledger Transactions Table */}
             <div className="space-y-2">

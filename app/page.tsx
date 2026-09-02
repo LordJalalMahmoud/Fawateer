@@ -75,6 +75,7 @@ import { NewMerchantModal } from '@/components/NewMerchantModal';
 import { SecretProfitVaultModal } from '@/components/SecretProfitVaultModal';
 import { CourierSettlementsModal } from '@/components/CourierSettlementsModal';
 import { ExpensesPayrollModal } from '@/components/ExpensesPayrollModal';
+import { CustomerProductsSummaryModal } from '@/components/CustomerProductsSummaryModal';
 import { 
   FilePlus, 
   Check, 
@@ -266,6 +267,15 @@ function InvoicesDashboard() {
 
   // Expenses & Payroll Modal
   const [isExpensesPayrollOpen, setIsExpensesPayrollOpen] = useState(false);
+
+  // Customer Products Demand Analytics Modal
+  const [isCustomerProductsSummaryOpen, setIsCustomerProductsSummaryOpen] = useState(false);
+  const [productsSummaryCustomer, setProductsSummaryCustomer] = useState<string | null>(null);
+
+  const handleOpenCustomerProductsSummary = (customerName?: string) => {
+    setProductsSummaryCustomer(customerName || null);
+    setIsCustomerProductsSummaryOpen(true);
+  };
 
   const [testingFirebase, setTestingFirebase] = useState(false);
 
@@ -812,6 +822,7 @@ function InvoicesDashboard() {
       <Navbar
         onNewInvoice={handleNewInvoice}
         onOpenCustomerLedger={() => setIsCustomerLedgerOpen(true)}
+        onOpenCustomerProductsSummary={() => handleOpenCustomerProductsSummary()}
         onOpenCatalog={() => setIsProductCatalogOpen(true)}
         onOpenTeamManagement={() => setIsTeamModalOpen(true)}
         onOpenSecretVault={() => setIsSecretVaultOpen(true)}
@@ -843,13 +854,23 @@ function InvoicesDashboard() {
               منظومة حسابات التجار والفواتير السحابية
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              إدارة الحسابات الجارية لكل تاجر، تسجيل مسحوبات البضاعة والدفعات، وإصدار كشوف الحساب والفواتير المجمعة بنقرة واحدة.
+              إدارة الحسابات الجارية لكل تاجر، متابعة إجمالي ما طلبه كل عميل من كل منتج، وتسجيل مسحوبات البضاعة والدفعات بنقرة واحدة.
             </p>
           </div>
 
           {/* Quick Actions & Header Buttons */}
           <div className="flex flex-wrap items-center gap-2.5 z-10 w-full md:w-auto">
             
+            {/* Customer Product Demand Shortcut */}
+            <button
+              onClick={() => handleOpenCustomerProductsSummary()}
+              className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-teal-200 bg-slate-800/90 hover:bg-slate-700 border border-teal-500/40 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
+              title="تقرير إجمالي ما طلبه كل عميل من كل صنف عبر جميع الفواتير"
+            >
+              <Package className="w-4 h-4 text-teal-400" />
+              <span>مسحوبات كل عميل</span>
+            </button>
+
             {/* Secret Vault Shortcut Button */}
             <button
               onClick={() => setIsSecretVaultOpen(true)}
@@ -857,7 +878,7 @@ function InvoicesDashboard() {
               title="خزنة وهوامش الأرباح السرية بين أسعار المصنع والشركة والتجار"
             >
               <Lock className="w-4 h-4" />
-              <span>خزنة الأرباح السرية</span>
+              <span>خزنة الأرباح</span>
             </button>
 
             {/* Expenses & Payroll Shortcut Button */}
@@ -943,6 +964,7 @@ function InvoicesDashboard() {
             onOpenAddGoods={handleOpenAddGoods}
             onOpenAddPayment={handleOpenAddPayment}
             onOpenStatement={handleOpenStatement}
+            onOpenProductsSummary={handleOpenCustomerProductsSummary}
           />
         ) : (
           /* VIEW 2: Invoices Timeline & KPIs */
@@ -1042,6 +1064,7 @@ function InvoicesDashboard() {
         onClose={() => setIsCustomerLedgerOpen(false)}
         invoices={invoices}
         onViewInvoice={handleViewInvoice}
+        onOpenCustomerProductsSummary={handleOpenCustomerProductsSummary}
       />
 
       {/* 4. Product & Price Catalog Modal */}
@@ -1162,6 +1185,17 @@ function InvoicesDashboard() {
         onSaveSalaryPayment={handleSaveSalaryPayment}
         onDeleteSalaryPayment={handleDeleteSalaryPayment}
         currentUserEmail={user?.email}
+      />
+
+      {/* 14. Customer Products Demand Consolidated Analytics Modal */}
+      <CustomerProductsSummaryModal
+        isOpen={isCustomerProductsSummaryOpen}
+        onClose={() => {
+          setIsCustomerProductsSummaryOpen(false);
+          setProductsSummaryCustomer(null);
+        }}
+        invoices={invoices}
+        initialSelectedCustomer={productsSummaryCustomer}
       />
 
     </div>

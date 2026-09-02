@@ -22,6 +22,7 @@ import { useAuth } from '@/lib/auth-context';
 interface NavbarProps {
   onNewInvoice: () => void;
   onOpenCustomerLedger: () => void;
+  onOpenCustomerProductsSummary?: () => void;
   onOpenCatalog: () => void;
   onOpenTeamManagement: () => void;
   onOpenSecretVault: () => void;
@@ -37,6 +38,7 @@ interface NavbarProps {
 export function Navbar({
   onNewInvoice,
   onOpenCustomerLedger,
+  onOpenCustomerProductsSummary,
   onOpenCatalog,
   onOpenTeamManagement,
   onOpenSecretVault,
@@ -144,6 +146,18 @@ export function Navbar({
               <Package className="w-4 h-4 text-slate-600" />
               <span className="hidden lg:inline">المنتجات والأسعار</span>
             </button>
+
+            {/* Customer Product Demand Summary Button */}
+            {onOpenCustomerProductsSummary && (
+              <button
+                onClick={onOpenCustomerProductsSummary}
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-bold text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer shadow-2xs"
+                title="تقرير إجمالي ما طلبه كل عميل من كل صنف ومنتج"
+              >
+                <Package className="w-4 h-4 text-teal-700" />
+                <span className="hidden md:inline">مسحوبات الأصناف</span>
+              </button>
+            )}
 
             {/* Customers Ledger */}
             <button
