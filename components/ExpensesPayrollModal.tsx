@@ -570,23 +570,6 @@ export function ExpensesPayrollModal({
   const [salNotes, setSalNotes] = useState('');
   const [isSubmittingSalary, setIsSubmittingSalary] = useState(false);
 
-  // Save partner name to local storage
-  const handleSavePartnerName = (newName: string) => {
-    const trimmed = newName.trim();
-    setPartnerName(trimmed);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('fawateer_partner_name', trimmed);
-    }
-    setIsEditingPartnerName(false);
-  };
-
-  const handleSaveAnnualProfitTarget = (val: number) => {
-    setAnnualProfitTarget(val);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('fawateer_partner_annual_profit', String(val));
-    }
-  };
-
   // Available Offices extracted from expenses + default list
   const availableOffices = useMemo(() => {
     const set = new Set<string>(DEFAULT_OFFICES);
