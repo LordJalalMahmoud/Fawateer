@@ -47,6 +47,8 @@ import {
   FileText,
   Sparkles,
   Check,
+  CheckCheck,
+  CalendarDays,
   UserX
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -100,6 +102,328 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, { label: string; icon:
   BANK_TRANSFER: { label: 'تحويل بنكي', icon: Landmark },
   CHECK: { label: 'شيك بنكي', icon: FileCheck },
 };
+
+// =========================================================================
+// 📅 ARABIC DATE & MONTH HELPERS
+// =========================================================================
+export function formatArabicDate(dateStr: string): string {
+  if (!dateStr) return '';
+  try {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return dateStr;
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('ar-EG-u-nu-latn', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+export function formatArabicMonth(monthStr: string): string {
+  if (!monthStr || monthStr === 'ALL') return '';
+  try {
+    const [y, m] = monthStr.split('-').map(Number);
+    if (!y || !m) return monthStr;
+    const date = new Date(y, m - 1, 1);
+    return date.toLocaleDateString('ar-EG-u-nu-latn', {
+      year: 'numeric',
+      month: 'long',
+    });
+  } catch {
+    return monthStr;
+  }
+}
+
+export function shiftDateStr(dateStr: string, deltaDays: number): string {
+  try {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d + deltaDays);
+    const ny = date.getFullYear();
+    const nm = String(date.getMonth() + 1).padStart(2, '0');
+    const nd = String(date.getDate()).padStart(2, '0');
+    return `${ny}-${nm}-${nd}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+export function shiftMonthStr(monthStr: string, deltaMonths: number): string {
+  try {
+    const [y, m] = monthStr.split('-').map(Number);
+    const date = new Date(y, m - 1 + deltaMonths, 1);
+    const ny = date.getFullYear();
+    const nm = String(date.getMonth() + 1).padStart(2, '0');
+    return `${ny}-${nm}`;
+  } catch {
+    return monthStr;
+  }
+}
+
+export function getPresetDate(
+  preset: 'today' | 'yesterday' | 'month-25' | 'month-start' | 'month-end',
+  targetMonth?: string
+): string {
+  const now = new Date();
+  if (preset === 'today') {
+    return now.toISOString().slice(0, 10);
+  }
+  if (preset === 'yesterday') {
+    const yest = new Date(now.getTime() - 86400000);
+    return yest.toISOString().slice(0, 10);
+  }
+
+  const mStr = targetMonth || now.toISOString().slice(0, 7);
+  const [y, m] = mStr.split('-').map(Number);
+
+  if (preset === 'month-start') {
+    return `${y}-${String(m).padStart(2, '0')}-01`;
+  }
+  if (preset === 'month-25') {
+    return `${y}-${String(m).padStart(2, '0')}-25`;
+  }
+  if (preset === 'month-end') {
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  }
+  return now.toISOString().slice(0, 10);
+}
+
+// =========================================================================
+// 🎯 SMART DATE INPUT COMPONENT
+// =========================================================================
+interface SmartDateInputProps {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  required?: boolean;
+  targetMonth?: string;
+  accentColor?: 'purple' | 'rose' | 'cyan' | 'amber';
+  presets?: ('today' | 'yesterday' | 'month-25' | 'month-start' | 'month-end')[];
+  hint?: string;
+}
+
+export function SmartDateInput({
+  label,
+  value,
+  onChange,
+  required = true,
+  targetMonth,
+  accentColor = 'purple',
+  presets = ['today', 'yesterday', 'month-25', 'month-start', 'month-end'],
+  hint,
+}: SmartDateInputProps) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const formattedArabic = formatArabicDate(value);
+
+  const accentBorder = {
+    purple: 'focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30',
+    rose: 'focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30',
+    cyan: 'focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30',
+    amber: 'focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30',
+  }[accentColor];
+
+  const activeChipBg = {
+    purple: 'bg-purple-600 text-white shadow-md shadow-purple-600/30 border-purple-500',
+    rose: 'bg-rose-600 text-white shadow-md shadow-rose-600/30 border-rose-500',
+    cyan: 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 border-cyan-500',
+    amber: 'bg-amber-600 text-white shadow-md shadow-amber-600/30 border-amber-500',
+  }[accentColor];
+
+  const presetLabels: Record<string, { label: string; date: string }> = {
+    today: { label: 'اليوم', date: getPresetDate('today') },
+    yesterday: { label: 'أمس', date: getPresetDate('yesterday') },
+    'month-25': { label: 'يوم 25 (الراتب)', date: getPresetDate('month-25', targetMonth) },
+    'month-start': { label: 'أول الشهر (1)', date: getPresetDate('month-start', targetMonth) },
+    'month-end': { label: 'آخر الشهر', date: getPresetDate('month-end', targetMonth) },
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs text-slate-300 font-semibold block">
+          {label} {required && <span className="text-rose-400">*</span>}
+        </label>
+        {hint && <span className="text-[10px] text-slate-400">{hint}</span>}
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(shiftDateStr(value || todayStr, -1))}
+          className="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-mono transition-colors cursor-pointer shrink-0"
+          title="اليوم السابق (-1 يوم)"
+        >
+          -1 يوم
+        </button>
+
+        <div className="relative flex-1">
+          <input
+            type="date"
+            required={required}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className={`w-full bg-slate-950 border border-slate-700 text-white font-mono text-xs font-bold rounded-xl px-3 py-2 outline-none transition-all ${accentBorder}`}
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onChange(shiftDateStr(value || todayStr, 1))}
+          className="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-mono transition-colors cursor-pointer shrink-0"
+          title="اليوم التالي (+1 يوم)"
+        >
+          +1 يوم
+        </button>
+      </div>
+
+      {/* Quick Preset Pills */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+        <span className="text-[10px] text-slate-500 font-medium ml-0.5">تحديد سريع:</span>
+        {presets.map(pKey => {
+          const item = presetLabels[pKey];
+          if (!item) return null;
+          const isSelected = value === item.date;
+          return (
+            <button
+              key={pKey}
+              type="button"
+              onClick={() => onChange(item.date)}
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer border ${
+                isSelected
+                  ? `${activeChipBg} font-bold`
+                  : 'bg-slate-900/90 text-slate-400 hover:text-white hover:bg-slate-800 border-slate-800'
+              }`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Readable Arabic Day Display */}
+      {formattedArabic && (
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-lg">
+          <CalendarDays className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+          <span className="text-slate-200 font-medium">{formattedArabic}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =========================================================================
+// 🗓️ SMART MONTH INPUT COMPONENT
+// =========================================================================
+interface SmartMonthInputProps {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  required?: boolean;
+  accentColor?: 'purple' | 'rose' | 'cyan';
+  hint?: string;
+}
+
+export function SmartMonthInput({
+  label,
+  value,
+  onChange,
+  required = true,
+  accentColor = 'purple',
+  hint,
+}: SmartMonthInputProps) {
+  const currentM = new Date().toISOString().slice(0, 7);
+  const prevM = shiftMonthStr(currentM, -1);
+  const formattedArabic = formatArabicMonth(value);
+
+  const accentBorder = {
+    purple: 'focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30',
+    rose: 'focus:border-rose-500 focus:ring-rose-500/30',
+    cyan: 'focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30',
+  }[accentColor];
+
+  const activeChipBg = {
+    purple: 'bg-purple-600 text-white shadow-md shadow-purple-600/30 border-purple-500',
+    rose: 'bg-rose-600 text-white shadow-md shadow-rose-600/30 border-rose-500',
+    cyan: 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 border-cyan-500',
+  }[accentColor];
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs text-slate-300 font-semibold block">
+          {label} {required && <span className="text-rose-400">*</span>}
+        </label>
+        {hint && <span className="text-[10px] text-slate-400">{hint}</span>}
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(shiftMonthStr(value || currentM, -1))}
+          className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 rounded-xl transition-colors cursor-pointer shrink-0"
+          title="الشهر السابق"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+
+        <input
+          type="month"
+          required={required}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className={`w-full bg-slate-950 border border-slate-700 text-white font-mono text-xs font-bold rounded-xl px-3 py-2 outline-none transition-all ${accentBorder}`}
+        />
+
+        <button
+          type="button"
+          onClick={() => onChange(shiftMonthStr(value || currentM, 1))}
+          className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 rounded-xl transition-colors cursor-pointer shrink-0"
+          title="الشهر التالي"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Quick Month Pills */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+        <button
+          type="button"
+          onClick={() => onChange(currentM)}
+          className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer border ${
+            value === currentM
+              ? `${activeChipBg} font-bold`
+              : 'bg-slate-900/90 text-slate-400 hover:text-white hover:bg-slate-800 border-slate-800'
+          }`}
+        >
+          الشهر الحالي ({formatArabicMonth(currentM)})
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(prevM)}
+          className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer border ${
+            value === prevM
+              ? `${activeChipBg} font-bold`
+              : 'bg-slate-900/90 text-slate-400 hover:text-white hover:bg-slate-800 border-slate-800'
+          }`}
+        >
+          الشهر السابق ({formatArabicMonth(prevM)})
+        </button>
+      </div>
+
+      {/* Readable Arabic Month Display */}
+      {formattedArabic && (
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-lg">
+          <Calendar className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+          <span className="text-slate-200 font-medium">محدد لـ: {formattedArabic}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ExpensesPayrollModal({
   isOpen,
@@ -196,6 +520,13 @@ export function ExpensesPayrollModal({
 
   const [isSalaryDisburseModalOpen, setIsSalaryDisburseModalOpen] = useState(false);
   const [disbursingEmployee, setDisbursingEmployee] = useState<Employee | null>(null);
+
+  // ⚡ Batch Salary Disburse Modal
+  const [isBatchDisburseModalOpen, setIsBatchDisburseModalOpen] = useState(false);
+  const [batchDisburseDate, setBatchDisburseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [batchPaymentMethod, setBatchPaymentMethod] = useState<PaymentMethod>('CASH');
+  const [batchSelectedEmpIds, setBatchSelectedEmpIds] = useState<string[]>([]);
+  const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
 
   // Single Expense Receipt Print Modal
   const [receiptToPrint, setReceiptToPrint] = useState<ExpenseItem | null>(null);
@@ -798,6 +1129,70 @@ export function ExpensesPayrollModal({
     }
   };
 
+  // ⚡ Batch Unpaid List & Total Calculation
+  const batchUnpaidList = useMemo(() => {
+    return displayedPayrollData.filter(d => !d.isPaid);
+  }, [displayedPayrollData]);
+
+  const batchTotalAmount = useMemo(() => {
+    return batchUnpaidList
+      .filter(d => batchSelectedEmpIds.includes(d.employee.id))
+      .reduce((sum, d) => sum + d.netPaid, 0);
+  }, [batchUnpaidList, batchSelectedEmpIds]);
+
+  // Handlers: Open Batch Salary Disbursement
+  const handleOpenBatchSalaryDisburse = () => {
+    const unpaidIds = displayedPayrollData.filter(d => !d.isPaid).map(d => d.employee.id);
+    setBatchSelectedEmpIds(unpaidIds);
+    setBatchDisburseDate(new Date().toISOString().slice(0, 10));
+    setBatchPaymentMethod('CASH');
+    setIsBatchDisburseModalOpen(true);
+  };
+
+  // Handlers: Save Batch Salary Disbursement Submit
+  const handleSaveBatchSalaryDisburseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (batchSelectedEmpIds.length === 0) return;
+
+    setIsSubmittingBatch(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const targetItems = batchUnpaidList.filter(d => batchSelectedEmpIds.includes(d.employee.id));
+
+      for (const item of targetItems) {
+        const emp = item.employee;
+        const recordId = `sal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const paymentRecord: SalaryPaymentRecord = {
+          id: recordId,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          month: selectedPayrollMonth,
+          paymentDate: batchDisburseDate,
+          baseSalary: item.baseSalary,
+          allowances: item.allowances,
+          bonuses: item.payment?.bonuses || 0,
+          commissions: item.commissions,
+          commissionInvoicesCount: item.commissionInvoicesCount,
+          deductions: item.deductions,
+          advances: item.advances,
+          netPaid: item.netPaid,
+          paymentMethod: batchPaymentMethod,
+          notes: `صرف جماعي - ${formatArabicMonth(selectedPayrollMonth)}`,
+          status: 'PAID',
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        await onSaveSalaryPayment(paymentRecord, true);
+      }
+
+      setIsBatchDisburseModalOpen(false);
+      confetti({ particleCount: 50, spread: 80 });
+    } finally {
+      setIsSubmittingBatch(false);
+    }
+  };
+
   // Export Expenses to CSV
   const handleExportExpensesCSV = () => {
     const headers = ['التاريخ', 'بند المصروف', 'التصنيف', 'المكتب / الفرع', 'المبلغ (ج.م)', 'طريقة الدفع', 'المستلم / الجهة', 'رقم السند/الإيصال', 'ملاحظات'];
@@ -1145,8 +1540,13 @@ export function ExpensesPayrollModal({
                       <ChevronRight className="w-4 h-4" />
                     </button>
                     
-                    <div className="flex items-center gap-1 px-1">
+                    <div className="flex items-center gap-1.5 px-1">
                       <Calendar className="w-3.5 h-3.5 text-rose-400" />
+                      {!isAllMonthsExpenseMode && (
+                        <span className="text-xs font-bold text-rose-300 whitespace-nowrap">
+                          {formatArabicMonth(selectedExpenseMonth)}
+                        </span>
+                      )}
                       <input
                         type="month"
                         value={selectedExpenseMonth}
@@ -1830,14 +2230,44 @@ export function ExpensesPayrollModal({
                 <div className="flex flex-wrap items-center gap-2.5">
                   {/* Monthly selector ("ويكون كل شهر لوحده") */}
                   <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-1 text-xs gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-cyan-400 mr-1.5" />
-                    <span className="text-slate-400 font-semibold">الشهر:</span>
-                    <input
-                      type="month"
-                      value={selectedPartnerMonth === 'ALL' ? '' : selectedPartnerMonth}
-                      onChange={e => setSelectedPartnerMonth(e.target.value || 'ALL')}
-                      className="bg-slate-950 border border-slate-700 text-white font-mono font-bold text-xs rounded-lg px-2.5 py-1 outline-none focus:border-cyan-500 cursor-pointer"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const base = selectedPartnerMonth === 'ALL' ? currentMonthStr : selectedPartnerMonth;
+                        setSelectedPartnerMonth(shiftMonthStr(base, -1));
+                      }}
+                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                      title="الشهر السابق"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center gap-1.5 px-1">
+                      <Calendar className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      {selectedPartnerMonth !== 'ALL' && (
+                        <span className="text-xs font-bold text-cyan-300 whitespace-nowrap">
+                          {formatArabicMonth(selectedPartnerMonth)}
+                        </span>
+                      )}
+                      <input
+                        type="month"
+                        value={selectedPartnerMonth === 'ALL' ? '' : selectedPartnerMonth}
+                        onChange={e => setSelectedPartnerMonth(e.target.value || 'ALL')}
+                        className="bg-slate-950 border border-slate-700 text-white font-mono font-bold text-xs rounded-lg px-2 py-1 outline-none focus:border-cyan-500 cursor-pointer"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const base = selectedPartnerMonth === 'ALL' ? currentMonthStr : selectedPartnerMonth;
+                        setSelectedPartnerMonth(shiftMonthStr(base, 1));
+                      }}
+                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                      title="الشهر التالي"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
 
                     <button
                       type="button"
@@ -2445,18 +2875,56 @@ export function ExpensesPayrollModal({
               
               {/* Month Selector and Payroll Overview */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
                     <Calendar className="w-5 h-5" />
                   </div>
-                  <div>
-                    <label className="text-xs text-slate-400 block font-medium">الشهر المحدد للمسير</label>
-                    <input
-                      type="month"
-                      value={selectedPayrollMonth}
-                      onChange={e => setSelectedPayrollMonth(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 text-white font-bold font-mono text-sm rounded-xl px-3 py-1 mt-0.5 outline-none focus:border-purple-500"
-                    />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 font-medium">مسير رواتب شهر:</span>
+                      <span className="text-xs font-bold text-white bg-purple-950/80 border border-purple-800/80 px-2.5 py-0.5 rounded-lg">
+                        {formatArabicMonth(selectedPayrollMonth)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-1 text-xs gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayrollMonth(shiftMonthStr(selectedPayrollMonth, -1))}
+                        className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                        title="الشهر السابق"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+
+                      <input
+                        type="month"
+                        value={selectedPayrollMonth}
+                        onChange={e => setSelectedPayrollMonth(e.target.value)}
+                        className="bg-slate-950 border border-slate-700 text-white font-mono font-bold text-xs rounded-lg px-2.5 py-1 outline-none focus:border-purple-500 cursor-pointer"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayrollMonth(shiftMonthStr(selectedPayrollMonth, 1))}
+                        className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                        title="الشهر التالي"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayrollMonth(currentMonthStr)}
+                        className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                          selectedPayrollMonth === currentMonthStr
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        هذا الشهر
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -2492,6 +2960,18 @@ export function ExpensesPayrollModal({
                       {monthPayrollSummary.remainingUnpaid.toLocaleString()} ج.م ({monthPayrollSummary.unpaidCount} موظف)
                     </span>
                   </div>
+
+                  {monthPayrollSummary.unpaidCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleOpenBatchSalaryDisburse}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all cursor-pointer"
+                      title="صرف رواتب جميع الموظفين المستحقين دفعة واحدة بتاريخ موحد"
+                    >
+                      <Zap className="w-4 h-4 text-amber-300" />
+                      <span>⚡ صرف جماعي للمتبقين ({monthPayrollSummary.unpaidCount})</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2820,13 +3300,13 @@ export function ExpensesPayrollModal({
                 </div>
 
                 <div>
-                  <label className="text-xs text-slate-300 font-semibold block mb-1">التاريخ</label>
-                  <input
-                    type="date"
-                    required
+                  <SmartDateInput
+                    label="تاريخ الصرف / السداد"
                     value={expDate}
-                    onChange={e => setExpDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 text-white font-mono text-xs rounded-xl px-3 py-2 outline-none focus:border-rose-500"
+                    onChange={setExpDate}
+                    accentColor="rose"
+                    presets={['today', 'yesterday', 'month-start', 'month-end']}
+                    hint="تاريخ سداد المصروف"
                   />
                 </div>
               </div>
@@ -3211,28 +3691,24 @@ export function ExpensesPayrollModal({
             </div>
 
             <form onSubmit={handleSaveSalaryDisburseSubmit} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-300 font-semibold block mb-1">شهر الاستحقاق</label>
-                  <input
-                    type="month"
-                    required
-                    value={salMonth}
-                    onChange={e => setSalMonth(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 text-white font-mono text-xs rounded-xl px-3 py-2 outline-none focus:border-purple-500"
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl">
+                <SmartMonthInput
+                  label="شهر الاستحقاق"
+                  value={salMonth}
+                  onChange={setSalMonth}
+                  accentColor="purple"
+                  hint="الشهر المحسوب عنه الراتب"
+                />
 
-                <div>
-                  <label className="text-xs text-slate-300 font-semibold block mb-1">تاريخ الصرف الفعلي</label>
-                  <input
-                    type="date"
-                    required
-                    value={salPaymentDate}
-                    onChange={e => setSalPaymentDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 text-white font-mono text-xs rounded-xl px-3 py-2 outline-none focus:border-purple-500"
-                  />
-                </div>
+                <SmartDateInput
+                  label="تاريخ الصرف الفعلي"
+                  value={salPaymentDate}
+                  onChange={setSalPaymentDate}
+                  targetMonth={salMonth}
+                  accentColor="purple"
+                  presets={['today', 'yesterday', 'month-25', 'month-start', 'month-end']}
+                  hint="تاريخ خروج النقدية"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -3518,13 +3994,13 @@ export function ExpensesPayrollModal({
                 </div>
 
                 <div>
-                  <label className="text-xs text-slate-300 font-semibold block mb-1">تاريخ السحب</label>
-                  <input
-                    type="date"
-                    required
+                  <SmartDateInput
+                    label="تاريخ السحب"
                     value={partDate}
-                    onChange={e => setPartDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 text-white font-mono text-xs rounded-xl px-3 py-2 outline-none focus:border-cyan-500"
+                    onChange={setPartDate}
+                    accentColor="cyan"
+                    presets={['today', 'yesterday', 'month-start', 'month-end']}
+                    hint="تاريخ تسليم الأرباح للشريك"
                   />
                 </div>
               </div>
@@ -3587,6 +4063,171 @@ export function ExpensesPayrollModal({
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>{isSubmittingPartnerWithdrawal ? 'جاري الحفظ...' : editingPartnerWithdrawal ? 'تحديث السحب' : 'توثيق سحب الأرباح'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* DIALOG 5: BATCH SALARY DISBURSEMENT MODAL (صرف جماعي للرواتب) */}
+      {/* ========================================================================= */}
+      {isBatchDisburseModalOpen && (
+        <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 text-right">
+          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-5 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                  <Zap className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    صرف جماعي لرواتب شهر ({formatArabicMonth(selectedPayrollMonth)})
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    تحديد موعد صرف موحد وطريقة دفع لكافة الموظفين المستحقين دفعة واحدة
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBatchDisburseModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBatchSalaryDisburseSubmit} className="space-y-4 flex-1 flex flex-col overflow-hidden">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl">
+                <SmartDateInput
+                  label="تاريخ الصرف الفعلي الموحد"
+                  value={batchDisburseDate}
+                  onChange={setBatchDisburseDate}
+                  targetMonth={selectedPayrollMonth}
+                  accentColor="purple"
+                  presets={['today', 'yesterday', 'month-25', 'month-start', 'month-end']}
+                  hint="سيسجل كتاريخ صرف لكافة الموظفين المحددين"
+                />
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-slate-300 font-semibold block">
+                    طريقة الصرف الموحدة <span className="text-rose-400">*</span>
+                  </label>
+                  <select
+                    value={batchPaymentMethod}
+                    onChange={e => setBatchPaymentMethod(e.target.value as PaymentMethod)}
+                    className="w-full bg-slate-950 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 outline-none focus:border-purple-500 font-medium"
+                  >
+                    {Object.entries(PAYMENT_METHOD_LABELS).map(([key, cfg]) => (
+                      <option key={key} value={key}>
+                        {cfg.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400">
+                    يتم تطبيق طريقة الدفع هذه على جميع السجلات المسجلة ضمن هذه الدفعة
+                  </p>
+                </div>
+              </div>
+
+              {/* Employee selection checklist */}
+              <div className="flex-1 overflow-hidden flex flex-col space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold px-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="selectAllBatch"
+                      checked={batchUnpaidList.length > 0 && batchSelectedEmpIds.length === batchUnpaidList.length}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setBatchSelectedEmpIds(batchUnpaidList.map(item => item.employee.id));
+                        } else {
+                          setBatchSelectedEmpIds([]);
+                        }
+                      }}
+                      className="rounded border-slate-700 bg-slate-950 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                    />
+                    <label htmlFor="selectAllBatch" className="text-slate-300 cursor-pointer">
+                      تحديد الكل ({batchUnpaidList.length} موظف مستحق)
+                    </label>
+                  </div>
+                  <span className="text-slate-400">
+                    تم تحديد: <strong className="text-purple-400">{batchSelectedEmpIds.length}</strong> من {batchUnpaidList.length}
+                  </span>
+                </div>
+
+                <div className="border border-slate-800 rounded-xl overflow-y-auto max-h-52 divide-y divide-slate-850 bg-slate-950/70">
+                  {batchUnpaidList.map(item => {
+                    const isSelected = batchSelectedEmpIds.includes(item.employee.id);
+                    return (
+                      <div
+                        key={item.employee.id}
+                        onClick={() => {
+                          setBatchSelectedEmpIds(prev =>
+                            prev.includes(item.employee.id)
+                              ? prev.filter(id => id !== item.employee.id)
+                              : [...prev, item.employee.id]
+                          );
+                        }}
+                        className={`p-3 flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected ? 'bg-purple-950/30' : 'hover:bg-slate-900/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer pointer-events-none"
+                          />
+                          <div>
+                            <span className="font-bold text-white text-xs block">{item.employee.name}</span>
+                            <span className="text-[11px] text-slate-400">{item.employee.jobTitle}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-left">
+                          <span className="text-sm font-bold font-mono text-emerald-400 block">
+                            {item.netPaid.toLocaleString()} ج.م
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-sans">صافي مستحق</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Total Summary Footer */}
+              <div className="p-3 bg-purple-950/30 border border-purple-800/40 rounded-xl flex items-center justify-between text-xs">
+                <span className="text-purple-200">
+                  إجمالي المبلغ المطلوب صرفه لهذه الدفعة:
+                </span>
+                <span className="text-base font-bold font-mono text-white">
+                  {batchTotalAmount.toLocaleString()} ج.م
+                </span>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsBatchDisburseModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 rounded-xl cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingBatch || batchSelectedEmpIds.length === 0}
+                  className="px-5 py-2.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  <span>
+                    {isSubmittingBatch
+                      ? 'جاري الصرف...'
+                      : `تأكيد صرف رواتب (${batchSelectedEmpIds.length}) موظف`}
+                  </span>
                 </button>
               </div>
             </form>
