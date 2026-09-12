@@ -46,7 +46,8 @@ import {
   PieChart,
   FileText,
   Sparkles,
-  Check
+  Check,
+  UserX
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ExpenseItem, Employee, SalaryPaymentRecord, ExpenseCategory, PaymentMethod, Invoice } from '@/lib/types';
@@ -87,7 +88,7 @@ export const CATEGORY_CONFIG: Record<ExpenseCategory, { label: string; icon: any
   HOSPITALITY: { label: 'بوفيه، نظافة وضيافة', icon: Coffee, color: 'text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/30' },
   COMMISSIONS: { label: 'عمولات ومكافآت بيع', icon: Award, color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/30' },
   TAX_LEGAL: { label: 'ضرائب، تراخيص ومحاماة', icon: Scale, color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/30' },
-  PARTNER_WITHDRAWAL: { label: 'مسحوبات أرباح الشركاء (مهجة)', icon: Crown, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
+  PARTNER_WITHDRAWAL: { label: 'مسحوبات أرباح الشركاء (مهجة / حاتم)', icon: Crown, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
   EMPLOYEE_ADVANCE: { label: 'سلف موظفين ومسحوبات', icon: HandCoins, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' },
   OTHER: { label: 'نثريات ومصروفات أخرى', icon: MoreHorizontal, color: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/30' },
 };
@@ -131,23 +132,37 @@ export function ExpensesPayrollModal({
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 💎 Partner / Profit Drawings State (مهجة / الشريك)
-  const [partnerName, setPartnerName] = useState<string>(() => {
+  // 💎 Partner / Profit Drawings State (مهجة & حاتم / الشركاء)
+  const [selectedPartnerTab, setSelectedPartnerTab] = useState<string>('مهجة');
+  const [customPartners, setCustomPartners] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('fawateer_partner_name') || 'مهجة';
+      const saved = localStorage.getItem('fawateer_custom_partners');
+      return saved ? JSON.parse(saved) : [];
     }
-    return 'مهجة';
+    return [];
   });
-  const [isEditingPartnerName, setIsEditingPartnerName] = useState(false);
-  const [tempPartnerName, setTempPartnerName] = useState(partnerName);
+  const [newPartnerNameInput, setNewPartnerNameInput] = useState('');
+  const [isAddingNewPartner, setIsAddingNewPartner] = useState(false);
 
-  const [annualProfitTarget, setAnnualProfitTarget] = useState<number>(() => {
+  // Targets per partner stored in localStorage
+  const [partnerTargets, setPartnerTargets] = useState<Record<string, number>>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('fawateer_partner_annual_profit');
-      return saved ? Number(saved) : 0;
+      const savedMohga = localStorage.getItem('fawateer_partner_annual_profit_مهجة') || localStorage.getItem('fawateer_partner_annual_profit');
+      const savedHatem = localStorage.getItem('fawateer_partner_annual_profit_حاتم');
+      return {
+        'مهجة': savedMohga ? Number(savedMohga) : 0,
+        'حاتم': savedHatem ? Number(savedHatem) : 0,
+      };
     }
-    return 0;
+    return { 'مهجة': 0, 'حاتم': 0 };
   });
+
+  const handleSavePartnerTarget = (partner: string, targetVal: number) => {
+    setPartnerTargets(prev => ({ ...prev, [partner]: targetVal }));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`fawateer_partner_annual_profit_${partner}`, String(targetVal));
+    }
+  };
 
   const [selectedPartnerMonth, setSelectedPartnerMonth] = useState<string>('ALL');
   const [selectedPartnerYear, setSelectedPartnerYear] = useState<string>(new Date().getFullYear().toString());
@@ -156,6 +171,7 @@ export function ExpensesPayrollModal({
   // Partner Withdrawal Form Modal
   const [isPartnerWithdrawalModalOpen, setIsPartnerWithdrawalModalOpen] = useState(false);
   const [editingPartnerWithdrawal, setEditingPartnerWithdrawal] = useState<ExpenseItem | null>(null);
+  const [partPartnerName, setPartPartnerName] = useState<string>('مهجة');
   const [partAmount, setPartAmount] = useState<number | ''>('');
   const [partDate, setPartDate] = useState(new Date().toISOString().slice(0, 10));
   const [partTitle, setPartTitle] = useState('دفعة من الأرباح السنوية');
@@ -163,6 +179,10 @@ export function ExpensesPayrollModal({
   const [partReceiptNumber, setPartReceiptNumber] = useState('');
   const [partNotes, setPartNotes] = useState('');
   const [isSubmittingPartnerWithdrawal, setIsSubmittingPartnerWithdrawal] = useState(false);
+
+  // 👥 Employee Views: Active Staff vs Resigned Archive
+  const [employeeViewTab, setEmployeeViewTab] = useState<'ACTIVE' | 'RESIGNED'>('ACTIVE');
+  const [showResignedInPayroll, setShowResignedInPayroll] = useState<boolean>(false);
 
   // Selected Month for Payroll view (YYYY-MM)
   const [selectedPayrollMonth, setSelectedPayrollMonth] = useState<string>(currentMonthStr);
@@ -189,6 +209,7 @@ export function ExpensesPayrollModal({
   const [expRecipient, setExpRecipient] = useState('');
   const [expReceiptNumber, setExpReceiptNumber] = useState('');
   const [expOffice, setExpOffice] = useState('المكتب الرئيسي');
+  const [expPartnerName, setExpPartnerName] = useState('مهجة');
   const [expNotes, setExpNotes] = useState('');
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
 
@@ -345,6 +366,14 @@ export function ExpensesPayrollModal({
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [filteredExpenses]);
 
+  // Helper to determine which partner a withdrawal belongs to (مهجة أو حاتم أو غيرهم)
+  const getWithdrawalPartner = (item: ExpenseItem): string => {
+    if (item.partnerName && item.partnerName.trim()) return item.partnerName.trim();
+    const combined = `${item.title || ''} ${item.recipient || ''} ${item.notes || ''}`;
+    if (combined.includes('حاتم')) return 'حاتم';
+    return 'مهجة';
+  };
+
   // 💎 Partner Withdrawals Filtered & Stats
   const partnerWithdrawals = useMemo(() => {
     return (expenses || []).filter(e => e.category === 'PARTNER_WITHDRAWAL' || e.isPartnerDrawing);
@@ -352,6 +381,10 @@ export function ExpensesPayrollModal({
 
   const filteredPartnerWithdrawals = useMemo(() => {
     return partnerWithdrawals.filter(item => {
+      const itemPartner = getWithdrawalPartner(item);
+      if (selectedPartnerTab !== 'ALL' && itemPartner !== selectedPartnerTab) {
+        return false;
+      }
       if (selectedPartnerMonth !== 'ALL' && !item.date.startsWith(selectedPartnerMonth)) {
         return false;
       }
@@ -363,11 +396,12 @@ export function ExpensesPayrollModal({
         const matchTitle = (item.title || '').toLowerCase().includes(q);
         const matchNotes = (item.notes || '').toLowerCase().includes(q);
         const matchReceipt = (item.receiptNumber || '').toLowerCase().includes(q);
-        if (!matchTitle && !matchNotes && !matchReceipt) return false;
+        const matchPartner = itemPartner.toLowerCase().includes(q);
+        if (!matchTitle && !matchNotes && !matchReceipt && !matchPartner) return false;
       }
       return true;
     });
-  }, [partnerWithdrawals, selectedPartnerMonth, selectedPartnerYear, partnerSearchQuery]);
+  }, [partnerWithdrawals, selectedPartnerTab, selectedPartnerMonth, selectedPartnerYear, partnerSearchQuery]);
 
   const partnerStats = useMemo(() => {
     const now = new Date();
@@ -378,18 +412,32 @@ export function ExpensesPayrollModal({
     let thisYearTotal = 0;
     let allTimeTotal = 0;
 
+    let mohgaTotal = 0;
+    let hatemTotal = 0;
+
     partnerWithdrawals.forEach(item => {
       const amt = Number(item.amount || 0);
-      allTimeTotal += amt;
-      if (item.date.startsWith(currentMonthPrefix)) {
-        thisMonthTotal += amt;
-      }
-      if (item.date.startsWith(currentYearPrefix)) {
-        thisYearTotal += amt;
+      const itemPartner = getWithdrawalPartner(item);
+
+      if (itemPartner === 'مهجة') mohgaTotal += amt;
+      else if (itemPartner === 'حاتم') hatemTotal += amt;
+
+      const matchesPartner = selectedPartnerTab === 'ALL' || itemPartner === selectedPartnerTab;
+      if (matchesPartner) {
+        allTimeTotal += amt;
+        if (item.date.startsWith(currentMonthPrefix)) {
+          thisMonthTotal += amt;
+        }
+        if (item.date.startsWith(currentYearPrefix)) {
+          thisYearTotal += amt;
+        }
       }
     });
 
     const selectedPeriodTotal = filteredPartnerWithdrawals.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const currentTarget = selectedPartnerTab === 'ALL'
+      ? (partnerTargets['مهجة'] || 0) + (partnerTargets['حاتم'] || 0)
+      : (partnerTargets[selectedPartnerTab] || 0);
 
     return {
       thisMonthTotal,
@@ -397,14 +445,20 @@ export function ExpensesPayrollModal({
       allTimeTotal,
       selectedPeriodTotal,
       count: filteredPartnerWithdrawals.length,
+      mohgaTotal,
+      hatemTotal,
+      currentTarget,
     };
-  }, [partnerWithdrawals, filteredPartnerWithdrawals]);
+  }, [partnerWithdrawals, filteredPartnerWithdrawals, selectedPartnerTab, partnerTargets]);
 
-  // Active Employees Stats
-  const activeEmployees = useMemo(() => employees.filter(e => e.status === 'ACTIVE'), [employees]);
+  // Active vs Resigned Employees Separation
+  const activeAndOnLeaveEmployees = useMemo(() => employees.filter(e => e.status !== 'RESIGNED'), [employees]);
+  const resignedEmployees = useMemo(() => employees.filter(e => e.status === 'RESIGNED'), [employees]);
+  const activeEmployees = activeAndOnLeaveEmployees;
+
   const totalMonthlyPayrollObligation = useMemo(() => {
-    return activeEmployees.reduce((sum, e) => sum + Number(e.baseSalary || 0) + Number(e.fixedAllowances || 0), 0);
-  }, [activeEmployees]);
+    return activeAndOnLeaveEmployees.reduce((sum, e) => sum + Number(e.baseSalary || 0) + Number(e.fixedAllowances || 0), 0);
+  }, [activeAndOnLeaveEmployees]);
 
   // Commissions calculated for each employee for selected month
   const monthlyCommissionsMap = useMemo(() => {
@@ -455,6 +509,12 @@ export function ExpensesPayrollModal({
     });
   }, [employees, salaryPayments, selectedPayrollMonth, monthlyCommissionsMap]);
 
+  // Displayed payroll data (filters out resigned employees unless showResignedInPayroll is enabled)
+  const displayedPayrollData = useMemo(() => {
+    if (showResignedInPayroll) return monthPayrollData;
+    return monthPayrollData.filter(item => item.employee.status !== 'RESIGNED');
+  }, [monthPayrollData, showResignedInPayroll]);
+
   const monthPayrollSummary = useMemo(() => {
     let totalObligation = 0;
     let totalPaid = 0;
@@ -464,16 +524,17 @@ export function ExpensesPayrollModal({
     let unpaidCount = 0;
 
     monthPayrollData.forEach(item => {
-      if (item.employee.status === 'ACTIVE') {
+      if (item.employee.status !== 'RESIGNED') {
         totalObligation += item.baseSalary + item.allowances + item.commissions;
         totalCommissions += item.commissions;
         commissionInvoicesCount += item.commissionInvoicesCount;
+        if (!item.isPaid) {
+          unpaidCount++;
+        }
       }
       if (item.isPaid && item.payment) {
         totalPaid += item.payment.netPaid;
         paidCount++;
-      } else if (item.employee.status === 'ACTIVE') {
-        unpaidCount++;
       }
     });
 
@@ -499,6 +560,7 @@ export function ExpensesPayrollModal({
     setExpRecipient('');
     setExpReceiptNumber('');
     setExpOffice(selectedOfficeFilter !== 'ALL' ? selectedOfficeFilter : 'المكتب الرئيسي');
+    setExpPartnerName(selectedPartnerTab === 'ALL' ? 'مهجة' : selectedPartnerTab);
     setExpNotes('');
     setIsExpenseFormOpen(true);
   };
@@ -514,6 +576,7 @@ export function ExpensesPayrollModal({
     setExpRecipient(expense.recipient || '');
     setExpReceiptNumber(expense.receiptNumber || '');
     setExpOffice(expense.office || 'المكتب الرئيسي');
+    setExpPartnerName(expense.partnerName || getWithdrawalPartner(expense));
     setExpNotes(expense.notes || '');
     setIsExpenseFormOpen(true);
   };
@@ -527,6 +590,7 @@ export function ExpensesPayrollModal({
     try {
       const nowIso = new Date().toISOString();
       const isPartnerDraw = expCategory === 'PARTNER_WITHDRAWAL';
+      const finalPartner = isPartnerDraw ? (expPartnerName || 'مهجة') : undefined;
       const expenseToSave: ExpenseItem = {
         id: editingExpense?.id || `exp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         date: expDate,
@@ -534,10 +598,10 @@ export function ExpensesPayrollModal({
         amount: Number(expAmount),
         category: expCategory,
         paymentMethod: expPaymentMethod,
-        recipient: expRecipient.trim() || undefined,
+        recipient: expRecipient.trim() || (isPartnerDraw ? finalPartner : undefined),
         receiptNumber: expReceiptNumber.trim() || undefined,
         office: expOffice.trim() || undefined,
-        partnerName: isPartnerDraw ? (partnerName || 'مهجة') : undefined,
+        partnerName: finalPartner,
         isPartnerDrawing: isPartnerDraw ? true : undefined,
         notes: expNotes.trim() || undefined,
         createdAt: editingExpense?.createdAt || nowIso,
@@ -553,11 +617,13 @@ export function ExpensesPayrollModal({
   };
 
   // Handlers: Open New Partner Withdrawal
-  const handleOpenNewPartnerWithdrawal = () => {
+  const handleOpenNewPartnerWithdrawal = (presetPartner?: string) => {
+    const targetPartner = presetPartner || (selectedPartnerTab === 'ALL' ? 'مهجة' : selectedPartnerTab);
     setEditingPartnerWithdrawal(null);
+    setPartPartnerName(targetPartner);
     setPartAmount('');
     setPartDate(new Date().toISOString().slice(0, 10));
-    setPartTitle(`دفعة من الأرباح السنوية`);
+    setPartTitle(`دفعة من الأرباح السنوية (${targetPartner})`);
     setPartPaymentMethod('CASH');
     setPartReceiptNumber('');
     setPartNotes('');
@@ -567,6 +633,7 @@ export function ExpensesPayrollModal({
   // Handlers: Open Edit Partner Withdrawal
   const handleOpenEditPartnerWithdrawal = (item: ExpenseItem) => {
     setEditingPartnerWithdrawal(item);
+    setPartPartnerName(getWithdrawalPartner(item));
     setPartAmount(item.amount);
     setPartDate(item.date);
     setPartTitle(item.title);
@@ -584,17 +651,18 @@ export function ExpensesPayrollModal({
     setIsSubmittingPartnerWithdrawal(true);
     try {
       const nowIso = new Date().toISOString();
+      const partner = partPartnerName || 'مهجة';
       const withdrawalToSave: ExpenseItem = {
         id: editingPartnerWithdrawal?.id || `exp-part-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         date: partDate,
-        title: partTitle.trim() || `مسحوبات أرباح - ${partnerName || 'الشريك'}`,
+        title: partTitle.trim() || `مسحوبات أرباح - ${partner}`,
         amount: Number(partAmount),
         category: 'PARTNER_WITHDRAWAL',
         paymentMethod: partPaymentMethod,
-        recipient: partnerName || 'الشريك',
+        recipient: partner,
         receiptNumber: partReceiptNumber.trim() || undefined,
         office: 'مسحوبات الشركاء',
-        partnerName: partnerName || 'مهجة',
+        partnerName: partner,
         isPartnerDrawing: true,
         notes: partNotes.trim() || undefined,
         createdAt: editingPartnerWithdrawal?.createdAt || nowIso,
@@ -857,7 +925,7 @@ export function ExpensesPayrollModal({
               }`}
             >
               <Crown className="w-4 h-4 text-cyan-300" />
-              <span>شيت مسحوبات الشركاء ({partnerName || 'بدون اسم'})</span>
+              <span>شيت مسحوبات الشركاء (مهجة / حاتم)</span>
               <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-slate-950/40 text-cyan-200 font-mono">
                 {partnerWithdrawals.length}
               </span>
@@ -888,9 +956,14 @@ export function ExpensesPayrollModal({
             >
               <Users className="w-4 h-4" />
               <span>سجل الموظفين والعمال</span>
-              <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-slate-950/40 text-slate-200 font-mono">
-                {activeEmployees.length}
+              <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-slate-950/40 text-emerald-300 font-mono font-bold">
+                {activeAndOnLeaveEmployees.length}
               </span>
+              {resignedEmployees.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-rose-950/60 text-rose-300 border border-rose-800/40 font-mono">
+                  {resignedEmployees.length} مستقيل
+                </span>
+              )}
             </button>
 
             <button
@@ -930,11 +1003,17 @@ export function ExpensesPayrollModal({
 
             {activeTab === 'PARTNER_SHEET' && (
               <button
-                onClick={handleOpenNewPartnerWithdrawal}
+                onClick={() => handleOpenNewPartnerWithdrawal(selectedPartnerTab === 'ALL' ? 'مهجة' : selectedPartnerTab)}
                 className="flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl shadow-md shadow-cyan-600/30 transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>تسجيل سحب جديد للشريك ({partnerName || 'بدون اسم'})</span>
+                <span>
+                  {selectedPartnerTab === 'حاتم'
+                    ? 'تسجيل سحب جديد (حاتم)'
+                    : selectedPartnerTab === 'مهجة'
+                    ? 'تسجيل سحب جديد (مهجة)'
+                    : 'تسجيل سحب جديد لشريك'}
+                </span>
               </button>
             )}
 
@@ -1422,87 +1501,221 @@ export function ExpensesPayrollModal({
           )}
 
           {/* ========================================================================= */}
-          {/* TAB 1.5: PARTNER SHEET - شيت مسحوبات الشركاء من الأرباح السنوية (مهجة) */}
-          {/* ("اعملي شيت ف المصروفات باسم مهجه ثابت او بدون اسم وانا هصيف الاسم دي بتاخد مصاريف من الارباح الثانوية علشان زي شريكه") */}
+          {/* TAB 1.5: PARTNER SHEET - شيت مسحوبات الشركاء من الأرباح السنوية (مهجة / حاتم) */}
           {/* ========================================================================= */}
           {activeTab === 'PARTNER_SHEET' && (
             <div className="space-y-5">
               
-              {/* Partner Name Banner & Customization */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-cyan-950/70 via-slate-900 to-blue-950/70 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+              {/* Partner Switcher Pills: مهجة vs حاتم vs الكل */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 bg-slate-950/90 border border-slate-800 rounded-2xl shadow-lg">
+                <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPartnerTab('مهجة')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      selectedPartnerTab === 'مهجة'
+                        ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/30 ring-2 ring-cyan-400/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <Crown className="w-4 h-4 text-cyan-300" />
+                    <span>شيت مسحوبات الشريكة (مهجة)</span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-slate-950/60 text-cyan-200 font-mono font-bold">
+                      {partnerWithdrawals.filter(w => getWithdrawalPartner(w) === 'مهجة').length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPartnerTab('حاتم')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      selectedPartnerTab === 'حاتم'
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg shadow-amber-600/30 ring-2 ring-amber-400/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <Crown className="w-4 h-4 text-amber-300" />
+                    <span>شيت مسحوبات الشريك (حاتم)</span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-slate-950/60 text-amber-200 font-mono font-bold">
+                      {partnerWithdrawals.filter(w => getWithdrawalPartner(w) === 'حاتم').length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPartnerTab('ALL')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      selectedPartnerTab === 'ALL'
+                        ? 'bg-slate-800 text-white border border-slate-600 shadow-md ring-2 ring-slate-500/30'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <Scale className="w-4 h-4 text-indigo-400" />
+                    <span>ملخص إجمالي الشركاء (مهجة + حاتم)</span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[10px] bg-slate-950/60 text-indigo-200 font-mono font-bold">
+                      {partnerWithdrawals.length}
+                    </span>
+                  </button>
+
+                  {/* Custom added partners if any */}
+                  {customPartners.map(pName => (
+                    <button
+                      key={pName}
+                      type="button"
+                      onClick={() => setSelectedPartnerTab(pName)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        selectedPartnerTab === pName
+                          ? 'bg-cyan-700 text-white'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      }`}
+                    >
+                      <Crown className="w-4 h-4 text-cyan-300" />
+                      <span>شيت ({pName})</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {isAddingNewPartner ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={newPartnerNameInput}
+                        onChange={e => setNewPartnerNameInput(e.target.value)}
+                        placeholder="اسم الشريك الجديد..."
+                        className="bg-slate-900 border border-cyan-500 text-white text-xs rounded-xl px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-cyan-400 w-36"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const name = newPartnerNameInput.trim();
+                          if (name && !customPartners.includes(name) && name !== 'مهجة' && name !== 'حاتم') {
+                            const updated = [...customPartners, name];
+                            setCustomPartners(updated);
+                            if (typeof window !== 'undefined') {
+                              localStorage.setItem('fawateer_custom_partners', JSON.stringify(updated));
+                            }
+                            setSelectedPartnerTab(name);
+                          }
+                          setNewPartnerNameInput('');
+                          setIsAddingNewPartner(false);
+                        }}
+                        className="px-2.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg cursor-pointer"
+                      >
+                        إضافة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewPartnerNameInput('');
+                          setIsAddingNewPartner(false);
+                        }}
+                        className="px-2 py-1.5 bg-slate-800 text-slate-400 hover:text-white text-xs rounded-lg cursor-pointer"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewPartner(true)}
+                      className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-cyan-300 hover:bg-slate-900 border border-slate-800 rounded-xl transition-colors cursor-pointer"
+                      title="إضافة شريك آخر"
+                    >
+                      + شريك إضافي
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenNewPartnerWithdrawal(selectedPartnerTab === 'ALL' ? 'مهجة' : selectedPartnerTab)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-cyan-600/30 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>
+                      {selectedPartnerTab === 'حاتم'
+                        ? 'تسجيل سحب جديد (حاتم)'
+                        : selectedPartnerTab === 'مهجة'
+                        ? 'تسجيل سحب جديد (مهجة)'
+                        : 'تسجيل سحب جديد'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Partner Banner */}
+              <div className={`p-4 sm:p-5 rounded-2xl border flex flex-wrap items-center justify-between gap-4 shadow-xl transition-all ${
+                selectedPartnerTab === 'حاتم'
+                  ? 'bg-gradient-to-r from-amber-950/70 via-slate-900 to-orange-950/70 border-amber-500/40'
+                  : selectedPartnerTab === 'مهجة'
+                  ? 'bg-gradient-to-r from-cyan-950/70 via-slate-900 to-blue-950/70 border-cyan-500/40'
+                  : 'bg-gradient-to-r from-indigo-950/70 via-slate-900 to-slate-950 border-indigo-500/40'
+              }`}>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300 shadow-inner">
+                  <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shadow-inner ${
+                    selectedPartnerTab === 'حاتم'
+                      ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                      : selectedPartnerTab === 'مهجة'
+                      ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
+                      : 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
+                  }`}>
                     <Crown className="w-6 h-6" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-cyan-400 flex items-center gap-1">
+                      <span className={`text-xs font-bold flex items-center gap-1 ${
+                        selectedPartnerTab === 'حاتم' ? 'text-amber-400' : selectedPartnerTab === 'مهجة' ? 'text-cyan-400' : 'text-indigo-400'
+                      }`}>
                         <Sparkles className="w-3 h-3" />
-                        <span>شيت الشركاء والمسحوبات من الأرباح السنوية</span>
+                        <span>شيت مسحوبات الشركاء من الأرباح السنوية</span>
                       </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-900/60 border border-cyan-700/60 text-cyan-200">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                        selectedPartnerTab === 'حاتم'
+                          ? 'bg-amber-900/60 border-amber-700/60 text-amber-200'
+                          : selectedPartnerTab === 'مهجة'
+                          ? 'bg-cyan-900/60 border-cyan-700/60 text-cyan-200'
+                          : 'bg-indigo-900/60 border-indigo-700/60 text-indigo-200'
+                      }`}>
                         حصة الأرباح السنوية
                       </span>
                     </div>
 
-                    {/* Editable Partner Name */}
-                    {isEditingPartnerName ? (
-                      <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="text"
-                          value={tempPartnerName}
-                          onChange={e => setTempPartnerName(e.target.value)}
-                          placeholder="أدخل اسم الشريك (مثل: مهجة أو اتركه فارغاً)..."
-                          className="bg-slate-950 border border-cyan-500 text-white font-bold text-sm rounded-xl px-3 py-1 outline-none focus:ring-1 focus:ring-cyan-400"
-                        />
-                        <button
-                          onClick={() => handleSavePartnerName(tempPartnerName)}
-                          className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-                        >
-                          حفظ الاسم
-                        </button>
-                        <button
-                          onClick={() => setIsEditingPartnerName(false)}
-                          className="px-2.5 py-1 bg-slate-800 text-slate-300 hover:text-white text-xs rounded-lg cursor-pointer"
-                        >
-                          إلغاء
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2.5 mt-1">
-                        <h3 className="text-lg sm:text-xl font-black text-white">
-                          حساب ومسحوبات الشريك:{' '}
-                          <span className="text-cyan-300 font-extrabold underline decoration-cyan-500/50 underline-offset-4">
-                            {partnerName || 'بدون اسم (اضغط لإضافة الاسم)'}
-                          </span>
-                        </h3>
-                        <button
-                          onClick={() => {
-                            setTempPartnerName(partnerName);
-                            setIsEditingPartnerName(true);
-                          }}
-                          className="text-xs text-cyan-400 hover:text-cyan-200 bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-800/60 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
-                          title="تعديل اسم الشريك"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                          <span>تعديل الاسم</span>
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2.5 mt-1">
+                      <h3 className="text-lg sm:text-xl font-black text-white">
+                        {selectedPartnerTab === 'حاتم' ? (
+                          <>حساب ومسحوبات الشريك: <span className="text-amber-300 font-extrabold underline decoration-amber-500/50 underline-offset-4">حاتم</span></>
+                        ) : selectedPartnerTab === 'مهجة' ? (
+                          <>حساب ومسحوبات الشريكة: <span className="text-cyan-300 font-extrabold underline decoration-cyan-500/50 underline-offset-4">مهجة</span></>
+                        ) : (
+                          <>شيت مسحوبات جميع الشركاء: <span className="text-indigo-300 font-extrabold">مهجة وحاتم</span></>
+                        )}
+                      </h3>
+                    </div>
 
                     <p className="text-xs text-slate-400 mt-1">
-                      سجل مخصص لقيد أي مصاريف أو سحوبات خاصة بالشريكة ({partnerName || 'الشريك'}) لتسويتها من صافي الأرباح السنوية دون تحميلها على مصاريف التشغيل اليومية.
+                      {selectedPartnerTab === 'حاتم'
+                        ? 'سجل مخصص لقيد أي مصاريف أو سحوبات خاصة بالشريك (حاتم) لتسويتها من صافي الأرباح السنوية دون تحميلها على مصاريف التشغيل اليومية.'
+                        : selectedPartnerTab === 'مهجة'
+                        ? 'سجل مخصص لقيد أي مصاريف أو سحوبات خاصة بالشريكة (مهجة) لتسويتها من صافي الأرباح السنوية دون تحميلها على مصاريف التشغيل اليومية.'
+                        : 'سجل مجمع لمتابعة مسحوبات الشركاء (مهجة وحاتم) ومقارنتها بالحصة المقدرة من توزيعات الأرباح السنوية.'}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={handleOpenNewPartnerWithdrawal}
+                    type="button"
+                    onClick={() => handleOpenNewPartnerWithdrawal(selectedPartnerTab === 'ALL' ? 'مهجة' : selectedPartnerTab)}
                     className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-cyan-600/30 transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>تسجيل سحب جديد ({partnerName || 'الشريك'})</span>
+                    <span>
+                      {selectedPartnerTab === 'حاتم'
+                        ? 'تسجيل سحب جديد (حاتم)'
+                        : selectedPartnerTab === 'مهجة'
+                        ? 'تسجيل سحب جديد (مهجة)'
+                        : 'تسجيل سحب جديد'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -1515,7 +1728,9 @@ export function ExpensesPayrollModal({
                     <div className="text-xl sm:text-2xl font-bold font-mono text-cyan-400 mt-1">
                       {partnerStats.thisMonthTotal.toLocaleString()} <span className="text-xs text-slate-400 font-sans">ج.م</span>
                     </div>
-                    <span className="text-[10px] text-slate-400">سحوبات الشهر الحالي للشريك</span>
+                    <span className="text-[10px] text-slate-400">
+                      {selectedPartnerTab === 'ALL' ? 'كل الشركاء' : `خاص بـ ${selectedPartnerTab}`}
+                    </span>
                   </div>
                   <div className="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
                     <Calendar className="w-5 h-5" />
@@ -1528,54 +1743,86 @@ export function ExpensesPayrollModal({
                     <div className="text-xl sm:text-2xl font-bold font-mono text-amber-400 mt-1">
                       {partnerStats.thisYearTotal.toLocaleString()} <span className="text-xs text-slate-400 font-sans">ج.م</span>
                     </div>
-                    <span className="text-[10px] text-slate-400">إجمالي مسحوبات الأرباح السنوية</span>
+                    <span className="text-[10px] text-slate-400">إجمالي مسحوبات السنة الحالية</span>
                   </div>
                   <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
                     <Crown className="w-5 h-5" />
                   </div>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs text-slate-400 font-medium">إجمالي كل المسحوبات المسجلة</span>
-                    <div className="text-xl sm:text-2xl font-bold font-mono text-white mt-1">
-                      {partnerStats.allTimeTotal.toLocaleString()} <span className="text-xs text-slate-400 font-sans">ج.م</span>
+                {selectedPartnerTab === 'ALL' ? (
+                  <>
+                    <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-slate-400 font-medium">مسحوبات الشريكة (مهجة)</span>
+                        <div className="text-xl sm:text-2xl font-bold font-mono text-cyan-300 mt-1">
+                          {partnerStats.mohgaTotal.toLocaleString()} <span className="text-xs text-slate-400 font-sans">ج.م</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">إجمالي سحوبات مهجة التاريخية</span>
+                      </div>
+                      <div className="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-300">
+                        <Crown className="w-5 h-5" />
+                      </div>
                     </div>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {partnerWithdrawals.length} حركة سحب كلية
-                    </span>
-                  </div>
-                  <div className="w-11 h-11 rounded-xl bg-slate-700/50 border border-slate-600/50 flex items-center justify-center text-slate-300">
-                    <TrendingDown className="w-5 h-5" />
-                  </div>
-                </div>
 
-                <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs text-slate-400 font-medium">حصة الأرباح السنوية المقدرة</span>
+                    <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-slate-400 font-medium">مسحوبات الشريك (حاتم)</span>
+                        <div className="text-xl sm:text-2xl font-bold font-mono text-amber-300 mt-1">
+                          {partnerStats.hatemTotal.toLocaleString()} <span className="text-xs text-slate-400 font-sans">ج.م</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">إجمالي سحوبات حاتم التاريخية</span>
+                      </div>
+                      <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-300">
+                        <Crown className="w-5 h-5" />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <input
-                        type="number"
-                        min="0"
-                        value={annualProfitTarget || ''}
-                        onChange={e => handleSaveAnnualProfitTarget(Number(e.target.value))}
-                        placeholder="أدخل الحصة المقدرة..."
-                        className="w-28 bg-slate-950 border border-slate-700 text-emerald-400 font-mono font-bold text-xs rounded-lg px-2 py-1 outline-none focus:border-emerald-500"
-                      />
-                      <span className="text-xs text-slate-400">ج.م</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-slate-400 font-medium">إجمالي كل المسحوبات المسجلة</span>
+                        <div className="text-xl sm:text-2xl font-bold font-mono text-white mt-1">
+                          {partnerStats.allTimeTotal.toLocaleString()} <span className="text-xs text-slate-400 font-sans">ج.م</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {filteredPartnerWithdrawals.length} حركة سحب مسجلة
+                        </span>
+                      </div>
+                      <div className="w-11 h-11 rounded-xl bg-slate-700/50 border border-slate-600/50 flex items-center justify-center text-slate-300">
+                        <TrendingDown className="w-5 h-5" />
+                      </div>
                     </div>
-                    {annualProfitTarget > 0 && (
-                      <span className="text-[10px] text-emerald-300 block mt-1">
-                        المتبقي: {(annualProfitTarget - partnerStats.thisYearTotal).toLocaleString()} ج.م
-                      </span>
-                    )}
-                  </div>
-                  <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                    <DollarSign className="w-5 h-5" />
-                  </div>
-                </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs text-slate-400 font-medium">حصة الأرباح السنوية ({selectedPartnerTab})</span>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <input
+                            type="number"
+                            min="0"
+                            value={partnerTargets[selectedPartnerTab] || ''}
+                            onChange={e => handleSavePartnerTarget(selectedPartnerTab, Number(e.target.value))}
+                            placeholder="أدخل الحصة المقدرة..."
+                            className="w-28 bg-slate-950 border border-slate-700 text-emerald-400 font-mono font-bold text-xs rounded-lg px-2 py-1 outline-none focus:border-emerald-500"
+                          />
+                          <span className="text-xs text-slate-400">ج.م</span>
+                        </div>
+                        {(partnerTargets[selectedPartnerTab] || 0) > 0 && (
+                          <span className="text-[10px] text-emerald-300 block mt-1">
+                            المتبقي: {((partnerTargets[selectedPartnerTab] || 0) - partnerStats.thisYearTotal).toLocaleString()} ج.م
+                          </span>
+                        )}
+                      </div>
+                      <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <DollarSign className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Partner Sheet Filter Controls Bar (كل شهر لوحده) */}
@@ -1640,11 +1887,12 @@ export function ExpensesPayrollModal({
                     type="text"
                     value={partnerSearchQuery}
                     onChange={e => setPartnerSearchQuery(e.target.value)}
-                    placeholder="بحث في بيان المسحوبات أو الملاحظات..."
+                    placeholder="بحث في البيان أو الشريك أو السند..."
                     className="w-full bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs rounded-xl pr-9 pl-3 py-2 outline-none focus:border-cyan-500"
                   />
                   {partnerSearchQuery && (
                     <button
+                      type="button"
                       onClick={() => setPartnerSearchQuery('')}
                       className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
                     >
@@ -1662,10 +1910,11 @@ export function ExpensesPayrollModal({
                       <Crown className="w-7 h-7" />
                     </div>
                     <p className="text-sm font-semibold text-slate-300">
-                      لا توجد مسحوبات مسجلة للشريك ({partnerName || 'بدون اسم'}) في الفترة المحددة
+                      لا توجد مسحوبات مسجلة لـ ({selectedPartnerTab === 'ALL' ? 'الشركاء' : selectedPartnerTab}) في الفترة المحددة
                     </p>
                     <button
-                      onClick={handleOpenNewPartnerWithdrawal}
+                      type="button"
+                      onClick={() => handleOpenNewPartnerWithdrawal(selectedPartnerTab === 'ALL' ? 'مهجة' : selectedPartnerTab)}
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-cyan-600/30 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -1680,7 +1929,7 @@ export function ExpensesPayrollModal({
                           <th className="py-3 px-4">التاريخ</th>
                           <th className="py-3 px-4">بيان / وصف المسحوب</th>
                           <th className="py-3 px-4">طريقة التحويل / الصرف</th>
-                          <th className="py-3 px-4">المستلم (الشريك)</th>
+                          <th className="py-3 px-4">الشريك المستفيد</th>
                           <th className="py-3 px-4">رقم السند / الإيصال</th>
                           <th className="py-3 px-4 text-left font-mono">المبلغ المسحوب</th>
                           <th className="py-3 px-4 text-center">إجراءات</th>
@@ -1689,6 +1938,7 @@ export function ExpensesPayrollModal({
                       <tbody className="divide-y divide-slate-800/60 font-medium">
                         {filteredPartnerWithdrawals.map(item => {
                           const payConfig = PAYMENT_METHOD_LABELS[item.paymentMethod] || PAYMENT_METHOD_LABELS.CASH;
+                          const partner = getWithdrawalPartner(item);
 
                           return (
                             <tr key={item.id} className="hover:bg-slate-900/60 transition-colors">
@@ -1706,8 +1956,23 @@ export function ExpensesPayrollModal({
                                   {payConfig.label}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 whitespace-nowrap font-semibold text-cyan-300">
-                                {partnerName || item.recipient || 'الشريك'}
+                              <td className="py-3 px-4 whitespace-nowrap font-semibold">
+                                {partner === 'مهجة' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                                    <Crown className="w-3 h-3 text-cyan-400" />
+                                    <span>مهجة</span>
+                                  </span>
+                                ) : partner === 'حاتم' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                                    <Crown className="w-3 h-3 text-amber-400" />
+                                    <span>حاتم</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+                                    <Crown className="w-3 h-3 text-indigo-400" />
+                                    <span>{partner}</span>
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3 px-4 font-mono text-slate-400 whitespace-nowrap">
                                 {item.receiptNumber || '—'}
@@ -1718,6 +1983,7 @@ export function ExpensesPayrollModal({
                               <td className="py-3 px-4 text-center whitespace-nowrap">
                                 <div className="flex items-center justify-center gap-1">
                                   <button
+                                    type="button"
                                     onClick={() => setReceiptToPrint(item)}
                                     className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                                     title="طباعة سند صرف الشريك"
@@ -1725,6 +1991,7 @@ export function ExpensesPayrollModal({
                                     <Printer className="w-3.5 h-3.5" />
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => handleOpenEditPartnerWithdrawal(item)}
                                     className="p-1.5 text-slate-400 hover:text-cyan-300 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                                     title="تعديل"
@@ -1732,6 +1999,7 @@ export function ExpensesPayrollModal({
                                     <Edit2 className="w-3.5 h-3.5" />
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       if (confirm(`هل أنت متأكد من حذف حركة مسحوبات (${item.title}) بقيمة ${item.amount} ج.م؟`)) {
                                         onDeleteExpense(item.id);
@@ -1751,7 +2019,7 @@ export function ExpensesPayrollModal({
                       <tfoot className="bg-slate-900/95 font-bold text-white border-t-2 border-slate-700">
                         <tr>
                           <td colSpan={5} className="py-3 px-4 text-left">
-                            إجمالي المسحوبات المعروضة للشريك ({partnerName || 'بدون اسم'}):
+                            إجمالي المسحوبات المعروضة لـ ({selectedPartnerTab === 'ALL' ? 'جميع الشركاء' : selectedPartnerTab}):
                           </td>
                           <td className="py-3 px-4 text-left font-mono text-base text-cyan-400">
                             {partnerStats.selectedPeriodTotal.toLocaleString()} ج.م
@@ -1765,8 +2033,7 @@ export function ExpensesPayrollModal({
               </div>
 
               {/* ========================================================================= */}
-              {/* BOTTOM TOTAL SUMMARY BOX - مربع إجمالي مسحوبات الشريك */}
-              {/* ("يكون في مربع تحت بيحسب الاجمالي ويكون كل شهر لوحده") */}
+              {/* BOTTOM TOTAL SUMMARY BOX - مربع إجمالي مسحوبات الشركاء */}
               {/* ========================================================================= */}
               <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-900/60 space-y-4 shadow-2xl">
                 <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1782,7 +2049,13 @@ export function ExpensesPayrollModal({
                         </span>
                       </div>
                       <h3 className="text-base font-bold text-white mt-1">
-                        إجمالي ما سحبته الشريكة ({partnerName || 'بدون اسم'}) من الأرباح السنوية
+                        {selectedPartnerTab === 'حاتم' ? (
+                          <>إجمالي ما سحبه الشريك (<strong className="text-amber-300">حاتم</strong>) من الأرباح السنوية</>
+                        ) : selectedPartnerTab === 'مهجة' ? (
+                          <>إجمالي ما سحبته الشريكة (<strong className="text-cyan-300">مهجة</strong>) من الأرباح السنوية</>
+                        ) : (
+                          <>إجمالي مسحوبات الشركاء (<strong className="text-cyan-300">مهجة</strong> و <strong className="text-amber-300">حاتم</strong>) من الأرباح السنوية</>
+                        )}
                       </h3>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         يتم خصم هذا المبلغ بالكامل من توزيعات أرباح نهاية السنة ({new Date().getFullYear()}).
@@ -1790,13 +2063,29 @@ export function ExpensesPayrollModal({
                     </div>
                   </div>
 
-                  <div className="text-left bg-slate-900 border border-cyan-800/60 px-5 py-3 rounded-2xl shadow-inner">
-                    <span className="text-[11px] text-slate-400 block font-semibold">المسحوبات المحسوبة للفترة:</span>
-                    <div className="text-2xl sm:text-3xl font-black font-mono text-cyan-400">
-                      {partnerStats.selectedPeriodTotal.toLocaleString()} <span className="text-xs font-sans text-slate-400 font-normal">ج.م</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      إجمالي مسحوبات السنة كلها: <strong className="font-mono text-amber-300">{partnerStats.thisYearTotal.toLocaleString()} ج.م</strong>
+                  <div className="flex flex-wrap items-center gap-4">
+                    {selectedPartnerTab === 'ALL' && (
+                      <div className="flex items-center gap-3 text-xs bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-xl">
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">مسحوبات مهجة:</span>
+                          <span className="font-mono font-bold text-cyan-300">{partnerStats.mohgaTotal.toLocaleString()} ج</span>
+                        </div>
+                        <div className="w-px h-7 bg-slate-800"></div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">مسحوبات حاتم:</span>
+                          <span className="font-mono font-bold text-amber-300">{partnerStats.hatemTotal.toLocaleString()} ج</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="text-left bg-slate-900 border border-cyan-800/60 px-5 py-3 rounded-2xl shadow-inner">
+                      <span className="text-[11px] text-slate-400 block font-semibold">المسحوبات المحسوبة للفترة:</span>
+                      <div className="text-2xl sm:text-3xl font-black font-mono text-cyan-400">
+                        {partnerStats.selectedPeriodTotal.toLocaleString()} <span className="text-xs font-sans text-slate-400 font-normal">ج.م</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        إجمالي مسحوبات السنة كلها: <strong className="font-mono text-amber-300">{partnerStats.thisYearTotal.toLocaleString()} ج.م</strong>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1842,128 +2131,282 @@ export function ExpensesPayrollModal({
                 </div>
               </div>
 
-              {/* Employees Grid / Cards */}
-              {employees.length === 0 ? (
-                <div className="py-16 text-center bg-slate-950 border border-slate-800 rounded-2xl text-slate-400 space-y-3">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-600">
-                    <Users className="w-7 h-7" />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-300">لم تقم بإضافة أي موظفين أو عمال بعد</p>
-                  <p className="text-xs text-slate-500">أضف الموظفين ليتمكن النظام من إعداد مسير الرواتب الشهري وحساب التكاليف تلقائياً</p>
+              {/* Sub-View Switcher: Active Staff vs Resigned Archive */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-slate-950 border border-slate-800 rounded-2xl">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={handleOpenNewEmployee}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/30"
+                    type="button"
+                    onClick={() => setEmployeeViewTab('ACTIVE')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      employeeViewTab === 'ACTIVE'
+                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
                   >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>إضافة أول موظف الآن</span>
+                    <Users className="w-4 h-4" />
+                    <span>الموظفون الحاليون (على رأس العمل)</span>
+                    <span className="px-2 py-0.5 rounded-md text-[11px] bg-slate-950/60 text-emerald-300 font-mono font-bold">
+                      {activeAndOnLeaveEmployees.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeViewTab('RESIGNED')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      employeeViewTab === 'RESIGNED'
+                        ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <UserX className="w-4 h-4" />
+                    <span>أرشيف الموظفين المستقيلين</span>
+                    <span className="px-2 py-0.5 rounded-md text-[11px] bg-slate-950/60 text-rose-300 font-mono font-bold">
+                      {resignedEmployees.length}
+                    </span>
                   </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {employees.map(emp => {
-                    const currentMonthPayment = salaryPayments.find(
-                      p => p.employeeId === emp.id && p.month === selectedPayrollMonth && p.status === 'PAID'
-                    );
-                    const isPaidThisMonth = Boolean(currentMonthPayment);
 
-                    return (
-                      <div
-                        key={emp.id}
-                        className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4"
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-300 font-bold text-sm">
-                                {emp.name.slice(0, 2)}
+                {employeeViewTab === 'RESIGNED' ? (
+                  <span className="text-xs text-rose-300 bg-rose-950/50 border border-rose-800/50 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <span>سجل منفصل للمستقيلين لحفظ بياناتهم ومسيراتهم دون التأثير على فريق العمل الحالي</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400 px-3 py-1.5 hidden sm:inline">
+                    فريق العمل النشط المؤهل لمسير الرواتب الشهرية والعمولات
+                  </span>
+                )}
+              </div>
+
+              {/* Employees Grid / Cards */}
+              {employeeViewTab === 'ACTIVE' ? (
+                activeAndOnLeaveEmployees.length === 0 ? (
+                  <div className="py-16 text-center bg-slate-950 border border-slate-800 rounded-2xl text-slate-400 space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-600">
+                      <Users className="w-7 h-7" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-300">لا يوجد موظفون نشطون حالياً</p>
+                    <p className="text-xs text-slate-500">أضف الموظفين ليتمكن النظام من إعداد مسير الرواتب الشهري وحساب التكاليف تلقائياً</p>
+                    <button
+                      onClick={handleOpenNewEmployee}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>إضافة أول موظف الآن</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {activeAndOnLeaveEmployees.map(emp => {
+                      const currentMonthPayment = salaryPayments.find(
+                        p => p.employeeId === emp.id && p.month === selectedPayrollMonth && p.status === 'PAID'
+                      );
+                      const isPaidThisMonth = Boolean(currentMonthPayment);
+
+                      return (
+                        <div
+                          key={emp.id}
+                          className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4 shadow-sm"
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-300 font-bold text-sm">
+                                  {emp.name.slice(0, 2)}
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-white">{emp.name}</h4>
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                                    <Briefcase className="w-3 h-3 text-slate-500" />
+                                    {emp.jobTitle}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                                  emp.status === 'ACTIVE'
+                                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                                }`}
+                              >
+                                {emp.status === 'ACTIVE' ? 'على رأس العمل' : 'في إجازة'}
+                              </span>
+                            </div>
+
+                            <div className="mt-4 pt-3 border-t border-slate-900 grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="text-slate-500 text-[11px] block">الراتب الأساسي</span>
+                                <span className="font-mono font-bold text-white text-sm">
+                                  {emp.baseSalary.toLocaleString()} ج.م
+                                </span>
                               </div>
                               <div>
-                                <h4 className="text-sm font-bold text-white">{emp.name}</h4>
-                                <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-                                  <Briefcase className="w-3 h-3 text-slate-500" />
-                                  {emp.jobTitle}
+                                <span className="text-slate-500 text-[11px] block">البدلات الثابتة</span>
+                                <span className="font-mono font-bold text-emerald-400 text-sm">
+                                  {(emp.fixedAllowances || 0).toLocaleString()} ج.م
                                 </span>
                               </div>
                             </div>
 
-                            <span
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
-                                emp.status === 'ACTIVE'
-                                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                                  : emp.status === 'ON_LEAVE'
-                                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                                  : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                            {/* Active deductions & advances badge if recorded this month */}
+                            {currentMonthPayment && ((currentMonthPayment.deductions > 0) || ((currentMonthPayment.advances || 0) > 0)) && (
+                              <div className="mt-2.5 pt-2 border-t border-slate-900 grid grid-cols-2 gap-2 text-[11px]">
+                                {currentMonthPayment.deductions > 0 ? (
+                                  <div className="bg-rose-950/40 border border-rose-800/40 px-2 py-1 rounded-lg">
+                                    <span className="text-rose-400 block text-[10px]">خصومات وجزاءات</span>
+                                    <span className="font-mono font-bold text-rose-300">-{currentMonthPayment.deductions.toLocaleString()} ج</span>
+                                  </div>
+                                ) : <div></div>}
+                                {(currentMonthPayment.advances || 0) > 0 ? (
+                                  <div className="bg-amber-950/40 border border-amber-800/40 px-2 py-1 rounded-lg">
+                                    <span className="text-amber-400 block text-[10px]">سلف ومسحوبات</span>
+                                    <span className="font-mono font-bold text-amber-300">-{currentMonthPayment.advances?.toLocaleString()} ج</span>
+                                  </div>
+                                ) : <div></div>}
+                              </div>
+                            )}
+
+                            {emp.phone && (
+                              <div className="mt-2.5 flex items-center gap-1 text-[11px] text-slate-400">
+                                <Phone className="w-3 h-3 text-slate-500" />
+                                <span className="font-mono">{emp.phone}</span>
+                              </div>
+                            )}
+
+                            {emp.defaultCommissionRate !== undefined && emp.defaultCommissionRate > 0 && (
+                              <div className="mt-2 flex items-center gap-1.5 text-[11px] text-indigo-300 bg-indigo-950/40 border border-indigo-800/40 px-2.5 py-1 rounded-lg">
+                                <Percent className="w-3 h-3 text-indigo-400" />
+                                <span>نسبة عمولة افتراضية: <strong className="font-mono text-indigo-200">{emp.defaultCommissionRate}%</strong></span>
+                              </div>
+                            )}
+
+                            {emp.notes && (
+                              <p className="mt-2 text-[11px] text-slate-400 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                                {emp.notes}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                            <button
+                              onClick={() => handleOpenDisburseSalary(emp)}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                isPaidThisMonth
+                                  ? 'bg-purple-950/60 text-purple-300 border border-purple-800/40 hover:bg-purple-900/60'
+                                  : 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30'
                               }`}
                             >
-                              {emp.status === 'ACTIVE' ? 'على رأس العمل' : emp.status === 'ON_LEAVE' ? 'في إجازة' : 'مستقيل'}
+                              <DollarSign className="w-3.5 h-3.5" />
+                              <span>{isPaidThisMonth ? 'تعديل صرف الراتب' : 'صرف راتب الشهر'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleOpenEditEmployee(emp)}
+                              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                              title="تعديل بيانات الموظف"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                if (confirm(`هل أنت متأكد من حذف الموظف (${emp.name})؟`)) {
+                                  onDeleteEmployee(emp.id);
+                                }
+                              }}
+                              className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+                              title="حذف"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                /* RESIGNED EMPLOYEES ARCHIVE VIEW */
+                resignedEmployees.length === 0 ? (
+                  <div className="py-16 text-center bg-slate-950 border border-slate-800 rounded-2xl text-slate-400 space-y-2">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-600">
+                      <UserX className="w-7 h-7" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-300">أرشيف المستقيلين فارغ</p>
+                    <p className="text-xs text-slate-500">لا يوجد أي موظف بحالة مستقيل حالياً، جميع الموظفين المسجلين على رأس العمل.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {resignedEmployees.map(emp => (
+                      <div
+                        key={emp.id}
+                        className="p-4 rounded-2xl bg-slate-950/80 border border-rose-950/60 hover:border-rose-900/80 transition-all flex flex-col justify-between space-y-4 opacity-90"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 font-bold text-sm">
+                                {emp.name.slice(0, 2)}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-slate-300 line-through decoration-rose-500/70">{emp.name}</h4>
+                                <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                                  <Briefcase className="w-3 h-3 text-slate-600" />
+                                  {emp.jobTitle} (سابقاً)
+                                </span>
+                              </div>
+                            </div>
+
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-950/60 text-rose-300 border border-rose-800/60">
+                              مستقيل / متوقف
                             </span>
                           </div>
 
                           <div className="mt-4 pt-3 border-t border-slate-900 grid grid-cols-2 gap-2 text-xs">
                             <div>
-                              <span className="text-slate-500 text-[11px] block">الراتب الأساسي</span>
-                              <span className="font-mono font-bold text-white text-sm">
+                              <span className="text-slate-500 text-[11px] block">آخر راتب أساسي</span>
+                              <span className="font-mono text-slate-400 text-sm">
                                 {emp.baseSalary.toLocaleString()} ج.م
                               </span>
                             </div>
                             <div>
-                              <span className="text-slate-500 text-[11px] block">البدلات الثابتة</span>
-                              <span className="font-mono font-bold text-emerald-400 text-sm">
-                                {(emp.fixedAllowances || 0).toLocaleString()} ج.م
+                              <span className="text-slate-500 text-[11px] block">تاريخ الالتحاق</span>
+                              <span className="font-mono text-slate-400 text-xs">
+                                {emp.joinDate || '—'}
                               </span>
                             </div>
                           </div>
 
-                          {/* Active deductions & advances badge if recorded this month */}
-                          {currentMonthPayment && ((currentMonthPayment.deductions > 0) || ((currentMonthPayment.advances || 0) > 0)) && (
-                            <div className="mt-2.5 pt-2 border-t border-slate-900 grid grid-cols-2 gap-2 text-[11px]">
-                              {currentMonthPayment.deductions > 0 ? (
-                                <div className="bg-rose-950/40 border border-rose-800/40 px-2 py-1 rounded-lg">
-                                  <span className="text-rose-400 block text-[10px]">خصومات وجزاءات</span>
-                                  <span className="font-mono font-bold text-rose-300">-{currentMonthPayment.deductions.toLocaleString()} ج</span>
-                                </div>
-                              ) : <div></div>}
-                              {(currentMonthPayment.advances || 0) > 0 ? (
-                                <div className="bg-amber-950/40 border border-amber-800/40 px-2 py-1 rounded-lg">
-                                  <span className="text-amber-400 block text-[10px]">سلف ومسحوبات</span>
-                                  <span className="font-mono font-bold text-amber-300">-{currentMonthPayment.advances?.toLocaleString()} ج</span>
-                                </div>
-                              ) : <div></div>}
-                            </div>
-                          )}
-
                           {emp.phone && (
-                            <div className="mt-2.5 flex items-center gap-1 text-[11px] text-slate-400">
-                              <Phone className="w-3 h-3 text-slate-500" />
+                            <div className="mt-2 flex items-center gap-1 text-[11px] text-slate-500">
+                              <Phone className="w-3 h-3 text-slate-600" />
                               <span className="font-mono">{emp.phone}</span>
                             </div>
                           )}
 
-                          {emp.defaultCommissionRate !== undefined && emp.defaultCommissionRate > 0 && (
-                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-indigo-300 bg-indigo-950/40 border border-indigo-800/40 px-2.5 py-1 rounded-lg">
-                              <Percent className="w-3 h-3 text-indigo-400" />
-                              <span>نسبة عمولة افتراضية: <strong className="font-mono text-indigo-200">{emp.defaultCommissionRate}%</strong></span>
-                            </div>
-                          )}
-
                           {emp.notes && (
-                            <p className="mt-2 text-[11px] text-slate-400 bg-slate-900 p-2 rounded-lg border border-slate-800">
-                              {emp.notes}
+                            <p className="mt-2 text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
+                              ملاحظات الاستقالة: {emp.notes}
                             </p>
                           )}
                         </div>
 
-                        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                        <div className="pt-3 border-t border-slate-900 flex items-center justify-between gap-2">
                           <button
-                            onClick={() => handleOpenDisburseSalary(emp)}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              isPaidThisMonth
-                                ? 'bg-purple-950/60 text-purple-300 border border-purple-800/40 hover:bg-purple-900/60'
-                                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30'
-                            }`}
+                            type="button"
+                            onClick={async () => {
+                              if (confirm(`هل تريد إعادة تفعيل الموظف (${emp.name}) وإعادته إلى فريق العمل النشط على رأس العمل؟`)) {
+                                await onSaveEmployee({ ...emp, status: 'ACTIVE' });
+                                confetti({ particleCount: 35, spread: 60 });
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold bg-emerald-950/50 text-emerald-300 border border-emerald-800/40 hover:bg-emerald-900/60 transition-all cursor-pointer"
+                            title="إعادة الموظف للعمل النشط"
                           >
-                            <DollarSign className="w-3.5 h-3.5" />
-                            <span>{isPaidThisMonth ? 'تعديل صرف الراتب' : 'صرف راتب الشهر'}</span>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>إعادة تعيين للعمل</span>
                           </button>
 
                           <button
@@ -1976,20 +2419,20 @@ export function ExpensesPayrollModal({
 
                           <button
                             onClick={() => {
-                              if (confirm(`هل أنت متأكد من حذف الموظف (${emp.name})؟`)) {
+                              if (confirm(`هل أنت متأكد من حذف الموظف المستقيل (${emp.name}) نهائياً؟`)) {
                                 onDeleteEmployee(emp.id);
                               }
                             }}
                             className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
-                            title="حذف"
+                            title="حذف نهائي"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           )}
@@ -2052,11 +2495,31 @@ export function ExpensesPayrollModal({
                 </div>
               </div>
 
+              {/* Toggle to show/hide resigned employees in payroll */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-950 border border-slate-800 rounded-2xl">
+                <label className="flex items-center gap-2 text-xs text-slate-300 font-semibold cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showResignedInPayroll}
+                    onChange={e => setShowResignedInPayroll(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                  />
+                  <span>إظهار الموظفين المستقيلين في مسير الرواتب ({resignedEmployees.length} مستقيل)</span>
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  {showResignedInPayroll
+                    ? 'يتم عرض الموظفين المستقيلين في الجدول لتسويات نهاية الخدمة والمستحقات السابقة'
+                    : 'افتراضياً: يتم إخفاء المستقيلين وعرض الموظفين على رأس العمل فقط'}
+                </span>
+              </div>
+
               {/* Printable Payroll Sheet */}
               <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-inner">
-                {monthPayrollData.length === 0 ? (
+                {displayedPayrollData.length === 0 ? (
                   <div className="py-14 text-center text-slate-400">
-                    لا يوجد موظفون مسجلون. يرجى إضافة الموظفين أولاً من تبويب &ldquo;سجل الموظفين والعمال&rdquo;.
+                    {showResignedInPayroll
+                      ? 'لا يوجد موظفون لعرضهم في مسير الرواتب.'
+                      : 'لا يوجد موظفون على رأس العمل لعرضهم. في حال رغبتك بعرض المستقيلين فعّل الخيار بالأعلى.'}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -2077,11 +2540,19 @@ export function ExpensesPayrollModal({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60 font-medium">
-                        {monthPayrollData.map(({ employee, payment, isPaid, baseSalary, allowances, commissions, commissionInvoicesCount, deductions, advances, netPaid }) => {
+                        {displayedPayrollData.map(({ employee, payment, isPaid, baseSalary, allowances, commissions, commissionInvoicesCount, deductions, advances, netPaid }) => {
+                          const isEmpResigned = employee.status === 'RESIGNED';
                           return (
                             <tr key={employee.id} className="hover:bg-slate-900/60 transition-colors">
                               <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
-                                <div>{employee.name}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <span>{employee.name}</span>
+                                  {isEmpResigned && (
+                                    <span className="text-[10px] text-rose-300 bg-rose-950/70 border border-rose-800/60 px-1.5 py-0.2 rounded font-normal">
+                                      مستقيل
+                                    </span>
+                                  )}
+                                </div>
                                 {employee.phone && (
                                   <span className="text-[10px] text-slate-500 font-mono">{employee.phone}</span>
                                 )}
@@ -2391,6 +2862,47 @@ export function ExpensesPayrollModal({
                   </select>
                 </div>
               </div>
+
+              {/* Partner selector if category is PARTNER_WITHDRAWAL */}
+              {expCategory === 'PARTNER_WITHDRAWAL' && (
+                <div className="p-3 bg-cyan-950/40 border border-cyan-800/40 rounded-xl space-y-2">
+                  <label className="text-xs text-cyan-300 font-semibold flex items-center gap-1.5">
+                    <Crown className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>الشريك المستفيد من سحب الأرباح <span className="text-cyan-400">*</span></span>
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpPartnerName('مهجة')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        expPartnerName === 'مهجة'
+                          ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-700'
+                      }`}
+                    >
+                      👑 مهجة
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpPartnerName('حاتم')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        expPartnerName === 'حاتم'
+                          ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-700'
+                      }`}
+                    >
+                      👑 حاتم
+                    </button>
+                    <input
+                      type="text"
+                      value={expPartnerName !== 'مهجة' && expPartnerName !== 'حاتم' ? expPartnerName : ''}
+                      onChange={e => setExpPartnerName(e.target.value)}
+                      placeholder="أو اسم شريك آخر..."
+                      className="bg-slate-950 border border-slate-700 text-white text-xs rounded-xl px-3 py-1.5 outline-none focus:border-cyan-500 flex-1 min-w-[120px]"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Office / Branch input */}
               <div>
@@ -2909,7 +3421,7 @@ export function ExpensesPayrollModal({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">
-                    {editingPartnerWithdrawal ? 'تعديل حركة سحب أرباح' : `تسجيل سحب أرباح: ${partnerName || 'الشريك'}`}
+                    {editingPartnerWithdrawal ? 'تعديل حركة سحب أرباح' : `تسجيل سحب أرباح: ${partPartnerName || 'الشريك'}`}
                   </h3>
                   <p className="text-[11px] text-slate-400">
                     يُسجل كمسحوبات شخصية من الأرباح السنوية للشريك ولا يُحسب ضمن تكاليف التشغيل
@@ -2925,6 +3437,55 @@ export function ExpensesPayrollModal({
             </div>
 
             <form onSubmit={handleSavePartnerWithdrawalSubmit} className="space-y-3.5">
+              {/* اختيار الشريك المستفيد */}
+              <div>
+                <label className="text-xs text-slate-300 font-semibold flex items-center gap-1.5 mb-1.5">
+                  <Crown className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>الشريك المستفيد من سحب الأرباح <span className="text-cyan-400">*</span></span>
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPartPartnerName('مهجة');
+                      if (!editingPartnerWithdrawal && (partTitle.includes('حاتم') || partTitle.startsWith('دفعة من الأرباح السنوية'))) {
+                        setPartTitle('دفعة من الأرباح السنوية (مهجة)');
+                      }
+                    }}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      partPartnerName === 'مهجة'
+                        ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-700'
+                    }`}
+                  >
+                    👑 الشريكة: مهجة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPartPartnerName('حاتم');
+                      if (!editingPartnerWithdrawal && (partTitle.includes('مهجة') || partTitle.startsWith('دفعة من الأرباح السنوية'))) {
+                        setPartTitle('دفعة من الأرباح السنوية (حاتم)');
+                      }
+                    }}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      partPartnerName === 'حاتم'
+                        ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-700'
+                    }`}
+                  >
+                    👑 الشريك: حاتم
+                  </button>
+                  <input
+                    type="text"
+                    value={partPartnerName !== 'مهجة' && partPartnerName !== 'حاتم' ? partPartnerName : ''}
+                    onChange={e => setPartPartnerName(e.target.value)}
+                    placeholder="أو اسم شريك آخر..."
+                    className="bg-slate-950 border border-slate-700 text-white text-xs rounded-xl px-3 py-1.5 outline-none focus:border-cyan-500 flex-1 min-w-[120px]"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs text-slate-300 font-semibold block mb-1">
                   بيان المسحوبات / الغرض <span className="text-cyan-400">*</span>
@@ -3008,7 +3569,7 @@ export function ExpensesPayrollModal({
               </div>
 
               <div className="p-3 bg-cyan-950/30 border border-cyan-800/40 rounded-xl text-[11px] text-cyan-200">
-                ⭐ مسجل باسم الشريك: <strong className="text-white font-bold">{partnerName || 'بدون اسم (شريك)'}</strong>. يتم تجميع هذه المبالغ في شيت الأرباح السنوية بشكل منفصل.
+                ⭐ مسجل باسم الشريك: <strong className="text-white font-bold">{partPartnerName || 'بدون اسم (شريك)'}</strong>. يتم تجميع هذه المبالغ في شيت الأرباح السنوية بشكل منفصل.
               </div>
 
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">

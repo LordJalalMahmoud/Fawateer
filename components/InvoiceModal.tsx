@@ -588,11 +588,22 @@ function InvoiceModalContent({
                 className="w-full px-3 py-2 text-sm bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800"
               >
                 <option value="">-- بدون مندوب مبيعات (بيع مباشر بالمخزن) --</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name} ({emp.jobTitle}) {emp.defaultCommissionRate ? `[عمولة افتراضية: ${emp.defaultCommissionRate}%]` : ''}
-                  </option>
-                ))}
+                <optgroup label="الموظفون الحاليون (على رأس العمل)">
+                  {employees.filter(emp => emp.status !== 'RESIGNED').map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.jobTitle}) {emp.defaultCommissionRate ? `[عمولة: ${emp.defaultCommissionRate}%]` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+                {employees.some(emp => emp.status === 'RESIGNED') && (
+                  <optgroup label="أرشيف الموظفين المستقيلين">
+                    {employees.filter(emp => emp.status === 'RESIGNED').map(emp => (
+                      <option key={emp.id} value={emp.id} className="text-slate-400">
+                        {emp.name} (مستقيل - {emp.jobTitle})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 

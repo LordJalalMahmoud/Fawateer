@@ -428,11 +428,22 @@ export function AddMerchantGoodsModal({
                   className="w-full px-2.5 py-1.5 text-xs bg-white border border-indigo-200 rounded-lg text-slate-800 font-medium"
                 >
                   <option value="">-- بدون مندوب (سحب مباشر) --</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.jobTitle}) {emp.defaultCommissionRate ? `[${emp.defaultCommissionRate}%]` : ''}
-                    </option>
-                  ))}
+                  <optgroup label="الموظفون الحاليون (على رأس العمل)">
+                    {employees.filter(emp => emp.status !== 'RESIGNED').map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.jobTitle}) {emp.defaultCommissionRate ? `[${emp.defaultCommissionRate}%]` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {employees.some(emp => emp.status === 'RESIGNED') && (
+                    <optgroup label="أرشيف الموظفين المستقيلين">
+                      {employees.filter(emp => emp.status === 'RESIGNED').map(emp => (
+                        <option key={emp.id} value={emp.id} className="text-slate-400">
+                          {emp.name} (مستقيل - {emp.jobTitle})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
 
