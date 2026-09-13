@@ -7,23 +7,24 @@ import {
   Package, 
   Download, 
   RotateCcw,
-  ReceiptText,
-  LogOut,
-  Database,
-  UserCheck,
-  Lock,
-  Truck,
-  DollarSign,
-  ChevronDown,
-  Menu,
-  X,
-  PackageCheck,
-  MoreHorizontal,
-  ShieldCheck,
-  Building2,
-  Receipt,
-  Layers,
-  Sparkles
+  ReceiptText, 
+  LogOut, 
+  Database, 
+  UserCheck, 
+  Lock, 
+  Truck, 
+  DollarSign, 
+  ChevronDown, 
+  Menu, 
+  X, 
+  PackageCheck, 
+  MoreHorizontal, 
+  ShieldCheck, 
+  Building2, 
+  Receipt, 
+  Layers, 
+  Sparkles,
+  LayoutDashboard
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -41,6 +42,8 @@ export interface NavbarProps {
   invoicesCount: number;
   courierCount?: number;
   expensesCount?: number;
+  currentView?: 'DASHBOARD' | 'CUSTOMERS' | 'INVOICES' | 'EXPENSES';
+  onSelectView?: (view: 'DASHBOARD' | 'CUSTOMERS' | 'INVOICES' | 'EXPENSES') => void;
 }
 
 export function Navbar({
@@ -57,6 +60,8 @@ export function Navbar({
   invoicesCount,
   courierCount = 0,
   expensesCount = 0,
+  currentView = 'DASHBOARD',
+  onSelectView,
 }: NavbarProps) {
   const { user, logout, projectId } = useAuth();
   
@@ -102,7 +107,7 @@ export function Navbar({
   return (
     <header 
       ref={navRef}
-      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs no-print transition-all" 
+      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs no-print transition-all" 
       dir="rtl"
     >
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -111,14 +116,17 @@ export function Navbar({
           {/* ========================================================= */}
           {/* 1. BRANDING & WORKSPACE INFORMATION */}
           {/* ========================================================= */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-sm shadow-emerald-600/20 shrink-0">
+          <div 
+            onClick={() => onSelectView?.('DASHBOARD')}
+            className="flex items-center gap-3 shrink-0 cursor-pointer group"
+          >
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-sm shadow-emerald-600/20 shrink-0 group-hover:scale-105 transition-transform">
               <ReceiptText className="w-5 h-5" />
             </div>
             
             <div className="flex flex-col text-right">
               <div className="flex items-center gap-2">
-                <span className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight whitespace-nowrap">
+                <span className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight whitespace-nowrap group-hover:text-emerald-800 transition-colors">
                   إدارة الفواتير والتحصيلات
                 </span>
                 
@@ -145,23 +153,56 @@ export function Navbar({
           {/* ========================================================= */}
           <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5">
             
-            {/* GROUP A: الحسابات والعملاء (Customers & Accounts Dropdown) */}
+            {/* MODULE 1: الرئيسية (Dashboard) */}
+            <button
+              type="button"
+              onClick={() => {
+                closeMenus();
+                onSelectView?.('DASHBOARD');
+              }}
+              className={`h-9 px-3 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                currentView === 'DASHBOARD'
+                  ? 'bg-slate-900 text-white font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              }`}
+            >
+              <LayoutDashboard className={`w-4 h-4 ${currentView === 'DASHBOARD' ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <span>الرئيسية</span>
+            </button>
+
+            {/* MODULE 2: العملاء والحسابات (Customers & Accounts) */}
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown('CUSTOMERS')}
-                className={`h-9 px-3 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDropdown === 'CUSTOMERS'
-                    ? 'bg-slate-100 text-slate-900 font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                }`}
-              >
-                <Users className="w-4 h-4 text-teal-600" />
-                <span>العملاء والحسابات</span>
-                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                  activeDropdown === 'CUSTOMERS' ? 'rotate-180 text-teal-600' : ''
-                }`} />
-              </button>
+              <div className="inline-flex rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenus();
+                    onSelectView?.('CUSTOMERS');
+                  }}
+                  className={`h-9 px-3 text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                    currentView === 'CUSTOMERS'
+                      ? 'bg-slate-900 text-white font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                >
+                  <Users className={`w-4 h-4 ${currentView === 'CUSTOMERS' ? 'text-teal-400' : 'text-teal-600'}`} />
+                  <span>العملاء والحسابات</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown('CUSTOMERS')}
+                  className={`h-9 px-1.5 text-xs transition-all cursor-pointer ${
+                    currentView === 'CUSTOMERS'
+                      ? 'bg-slate-900 text-white border-r border-slate-700'
+                      : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                  title="المزيد من خيارات العملاء"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    activeDropdown === 'CUSTOMERS' ? 'rotate-180' : ''
+                  }`} />
+                </button>
+              </div>
 
               {activeDropdown === 'CUSTOMERS' && (
                 <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/10 p-1.5 space-y-1 animate-in fade-in-50 zoom-in-95 duration-150 z-50">
@@ -172,19 +213,39 @@ export function Navbar({
                   <button
                     onClick={() => {
                       closeMenus();
-                      onOpenCustomerLedger();
+                      onSelectView?.('CUSTOMERS');
                     }}
                     className="w-full p-2.5 text-right rounded-xl hover:bg-slate-50 flex items-start gap-2.5 transition-colors cursor-pointer group"
                   >
                     <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200/60 flex items-center justify-center text-teal-700 shrink-0 group-hover:bg-teal-100 transition-colors">
-                      <Users className="w-4 h-4" />
+                      <Building2 className="w-4 h-4" />
                     </div>
                     <div className="flex-1">
                       <div className="text-xs font-bold text-slate-800 group-hover:text-teal-900">
-                        كشف حسابات العملاء
+                        سجل الحسابات الجارية للتجار
                       </div>
                       <div className="text-[11px] text-slate-500 font-normal leading-relaxed">
-                        متابعة الحساب الجاري، الدفعات، والمديونيات
+                        جدول كامل بالمديونيات، المسحوبات والدفعات
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      closeMenus();
+                      onOpenCustomerLedger();
+                    }}
+                    className="w-full p-2.5 text-right rounded-xl hover:bg-slate-50 flex items-start gap-2.5 transition-colors cursor-pointer group"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0 group-hover:bg-slate-200 transition-colors">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-xs font-bold text-slate-800">
+                        كشف حسابات العملاء المجمع
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-normal leading-relaxed">
+                        نافذة فحص تفاصيل الحسابات
                       </div>
                     </div>
                   </button>
@@ -202,10 +263,10 @@ export function Navbar({
                       </div>
                       <div className="flex-1">
                         <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">
-                          مسحوبات الأصناف
+                          تقرير مسحوبات الأصناف
                         </div>
                         <div className="text-[11px] text-slate-500 font-normal leading-relaxed">
-                          تقرير تفصيلي لما طلبه كل عميل من كل صنف
+                          ما طلبه كل عميل من كل صنف
                         </div>
                       </div>
                     </button>
@@ -214,45 +275,62 @@ export function Navbar({
               )}
             </div>
 
-            {/* GROUP B: الشحن والقطاعي (Shipping Settlements Link) */}
+            {/* MODULE 3: سجل الفواتير والمبيعات (Invoices) */}
             <button
               type="button"
               onClick={() => {
                 closeMenus();
-                onOpenCourierSettlements();
+                onSelectView?.('INVOICES');
               }}
-              className="h-9 px-3 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 inline-flex items-center gap-1.5 transition-all cursor-pointer"
-              title="تحصيلات وتسويات شركات الشحن ومبيعات القطاعي"
+              className={`h-9 px-3 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                currentView === 'INVOICES'
+                  ? 'bg-slate-900 text-white font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              }`}
             >
-              <Truck className="w-4 h-4 text-indigo-600" />
-              <span>تحصيلات الشحن</span>
-              {courierCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-mono font-bold">
-                  {courierCount}
-                </span>
-              )}
+              <Receipt className={`w-4 h-4 ${currentView === 'INVOICES' ? 'text-emerald-400' : 'text-emerald-600'}`} />
+              <span>الفواتير</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold">
+                {invoicesCount}
+              </span>
             </button>
 
-            {/* GROUP C: المالية والرواتب (Finance & Vault Dropdown) */}
+            {/* MODULE 4: المالية والرواتب (Finance & Payroll) */}
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown('FINANCE')}
-                className={`h-9 px-3 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDropdown === 'FINANCE'
-                    ? 'bg-slate-100 text-slate-900 font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                }`}
-              >
-                <DollarSign className="w-4 h-4 text-rose-600" />
-                <span>المالية والرواتب</span>
-                {expensesCount > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                )}
-                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                  activeDropdown === 'FINANCE' ? 'rotate-180 text-rose-600' : ''
-                }`} />
-              </button>
+              <div className="inline-flex rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenus();
+                    onSelectView?.('EXPENSES');
+                  }}
+                  className={`h-9 px-3 text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                    currentView === 'EXPENSES'
+                      ? 'bg-slate-900 text-white font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                >
+                  <DollarSign className={`w-4 h-4 ${currentView === 'EXPENSES' ? 'text-rose-400' : 'text-rose-600'}`} />
+                  <span>المالية والرواتب</span>
+                  {expensesCount > 0 && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown('FINANCE')}
+                  className={`h-9 px-1.5 text-xs transition-all cursor-pointer ${
+                    currentView === 'EXPENSES'
+                      ? 'bg-slate-900 text-white border-r border-slate-700'
+                      : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                  title="المزيد من خيارات المالية"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    activeDropdown === 'FINANCE' ? 'rotate-180' : ''
+                  }`} />
+                </button>
+              </div>
 
               {activeDropdown === 'FINANCE' && (
                 <div className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/10 p-1.5 space-y-1 animate-in fade-in-50 zoom-in-95 duration-150 z-50">
@@ -263,7 +341,7 @@ export function Navbar({
                   <button
                     onClick={() => {
                       closeMenus();
-                      onOpenExpensesPayroll();
+                      onSelectView?.('EXPENSES');
                     }}
                     className="w-full p-2.5 text-right rounded-xl hover:bg-slate-50 flex items-start gap-2.5 transition-colors cursor-pointer group"
                   >
@@ -276,13 +354,13 @@ export function Navbar({
                           المصروفات والرواتب
                         </span>
                         {expensesCount > 0 && (
-                          <span className="px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+                          <span className="px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold font-mono">
                             {expensesCount} حركة
                           </span>
                         )}
                       </div>
                       <div className="text-[11px] text-slate-500 font-normal leading-relaxed">
-                        مسير الرواتب الشهرية والعمولات والمصروفات التشغيلية
+                        مسير الرواتب الشهرية والمصروفات ومسحوبات الشركاء
                       </div>
                     </div>
                   </button>
@@ -314,6 +392,25 @@ export function Navbar({
                 </div>
               )}
             </div>
+
+            {/* GROUP B: الشحن والقطاعي (Shipping Settlements Link) */}
+            <button
+              type="button"
+              onClick={() => {
+                closeMenus();
+                onOpenCourierSettlements();
+              }}
+              className="h-9 px-3 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 inline-flex items-center gap-1.5 transition-all cursor-pointer"
+              title="تحصيلات وتسويات شركات الشحن ومبيعات القطاعي"
+            >
+              <Truck className="w-4 h-4 text-indigo-600" />
+              <span>تحصيلات الشحن</span>
+              {courierCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-mono font-bold">
+                  {courierCount}
+                </span>
+              )}
+            </button>
 
             {/* GROUP D: المنتجات والأسعار (Catalog Link) */}
             <button
@@ -399,13 +496,6 @@ export function Navbar({
           {/* ========================================================= */}
           <div className="flex items-center gap-2 sm:gap-3">
             
-            {/* Invoice Count Subtle Badge */}
-            <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200/80">
-              <Receipt className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{invoicesCount}</span>
-              <span className="text-slate-400 font-normal text-[11px]">فاتورة</span>
-            </div>
-
             {/* PRIMARY CTA: فاتورة جديدة */}
             <button
               type="button"
@@ -492,62 +582,72 @@ export function Navbar({
       </div>
 
       {/* ========================================================= */}
-      {/* 4. RESPONSIVE MOBILE DRAWER (Clean accordion for < lg screens) */}
+      {/* 4. RESPONSIVE MOBILE DRAWER */}
       {/* ========================================================= */}
       {isMobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-3 space-y-3 animate-in slide-in-from-top-2 duration-150 max-h-[80vh] overflow-y-auto shadow-xl">
           
-          {/* Mobile Workspace Info */}
-          <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-            <div className="flex items-center gap-2 text-slate-700 font-medium">
-              <Database className="w-3.5 h-3.5 text-emerald-600" />
-              <span>مشروع Firebase:</span>
-              <strong className="font-mono text-slate-900">{projectId}</strong>
-            </div>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-              {invoicesCount} فاتورة
-            </span>
-          </div>
-
-          {/* Section: العملاء والحسابات */}
-          <div className="space-y-1">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
-              العملاء والحسابات
-            </div>
+          {/* Main Views Switcher for Mobile */}
+          <div className="grid grid-cols-2 gap-2 pb-2 border-b border-slate-100">
             <button
               onClick={() => {
                 closeMenus();
-                onOpenCustomerLedger();
+                onSelectView?.('DASHBOARD');
               }}
-              className="w-full p-2.5 text-right rounded-xl hover:bg-slate-100/80 flex items-center gap-3 text-xs font-bold text-slate-800 cursor-pointer"
+              className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer ${
+                currentView === 'DASHBOARD' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+              }`}
             >
-              <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-                <Users className="w-4 h-4" />
-              </div>
-              <span>كشف حسابات العملاء</span>
+              <LayoutDashboard className="w-4 h-4" />
+              <span>الرئيسية</span>
             </button>
 
-            {onOpenCustomerProductsSummary && (
-              <button
-                onClick={() => {
-                  closeMenus();
-                  onOpenCustomerProductsSummary();
-                }}
-                className="w-full p-2.5 text-right rounded-xl hover:bg-slate-100/80 flex items-center gap-3 text-xs font-bold text-slate-800 cursor-pointer"
-              >
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                  <PackageCheck className="w-4 h-4" />
-                </div>
-                <span>مسحوبات كل عميل من الأصناف</span>
-              </button>
-            )}
+            <button
+              onClick={() => {
+                closeMenus();
+                onSelectView?.('CUSTOMERS');
+              }}
+              className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer ${
+                currentView === 'CUSTOMERS' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>العملاء</span>
+            </button>
+
+            <button
+              onClick={() => {
+                closeMenus();
+                onSelectView?.('INVOICES');
+              }}
+              className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer ${
+                currentView === 'INVOICES' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <Receipt className="w-4 h-4" />
+              <span>الفواتير</span>
+            </button>
+
+            <button
+              onClick={() => {
+                closeMenus();
+                onSelectView?.('EXPENSES');
+              }}
+              className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer ${
+                currentView === 'EXPENSES' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <DollarSign className="w-4 h-4" />
+              <span>المصروفات</span>
+            </button>
           </div>
 
           {/* Section: الشحن والعمليات */}
-          <div className="space-y-1 pt-1 border-t border-slate-100">
+          <div className="space-y-1">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
-              الشحن والمبيعات
+              العمليات والدليل
             </div>
+            
             <button
               onClick={() => {
                 closeMenus();
@@ -562,7 +662,7 @@ export function Navbar({
                 <span>تحصيلات الشحن والقطاعي</span>
               </div>
               {courierCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold font-mono">
                   {courierCount}
                 </span>
               )}
@@ -579,32 +679,6 @@ export function Navbar({
                 <Package className="w-4 h-4" />
               </div>
               <span>دليل المنتجات وقوائم الأسعار</span>
-            </button>
-          </div>
-
-          {/* Section: المالية والخزنة */}
-          <div className="space-y-1 pt-1 border-t border-slate-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
-              المالية والأرباح
-            </div>
-            <button
-              onClick={() => {
-                closeMenus();
-                onOpenExpensesPayroll();
-              }}
-              className="w-full p-2.5 text-right rounded-xl hover:bg-slate-100/80 flex items-center justify-between text-xs font-bold text-slate-800 cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-700 flex items-center justify-center shrink-0">
-                  <DollarSign className="w-4 h-4" />
-                </div>
-                <span>المصروفات والرواتب التشغيلية</span>
-              </div>
-              {expensesCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
-                  {expensesCount}
-                </span>
-              )}
             </button>
 
             <button
@@ -626,21 +700,17 @@ export function Navbar({
             </button>
           </div>
 
-          {/* Section: أدوات إضافية وتسجيل الخروج */}
+          {/* Section: أدوات وتسجيل خروج */}
           <div className="space-y-1 pt-1 border-t border-slate-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
-              الإعدادات والأدوات
-            </div>
-            
             <button
               onClick={() => {
                 closeMenus();
                 onOpenTeamManagement();
               }}
-              className="w-full p-2.5 text-right rounded-xl hover:bg-slate-100/80 flex items-center gap-3 text-xs font-bold text-slate-800 cursor-pointer"
+              className="w-full p-2 text-right rounded-xl hover:bg-slate-100/80 flex items-center gap-3 text-xs font-bold text-slate-800 cursor-pointer"
             >
-              <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-                <UserCheck className="w-4 h-4" />
+              <div className="w-6 h-6 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+                <UserCheck className="w-3.5 h-3.5" />
               </div>
               <span>فريق العمل والمدراء</span>
             </button>
@@ -650,25 +720,12 @@ export function Navbar({
                 closeMenus();
                 onExportCSV();
               }}
-              className="w-full p-2.5 text-right rounded-xl hover:bg-slate-100/80 flex items-center gap-3 text-xs font-bold text-slate-800 cursor-pointer"
+              className="w-full p-2 text-right rounded-xl hover:bg-slate-100/80 flex items-center gap-3 text-xs font-bold text-slate-800 cursor-pointer"
             >
-              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                <Download className="w-4 h-4" />
+              <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                <Download className="w-3.5 h-3.5" />
               </div>
               <span>تصدير ملف Excel / CSV</span>
-            </button>
-
-            <button
-              onClick={() => {
-                closeMenus();
-                onClearData();
-              }}
-              className="w-full p-2.5 text-right rounded-xl hover:bg-rose-50 flex items-center gap-3 text-xs font-bold text-rose-600 cursor-pointer"
-            >
-              <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                <RotateCcw className="w-4 h-4" />
-              </div>
-              <span>تفريغ ومسح الفواتير</span>
             </button>
 
             {user && (
@@ -677,7 +734,7 @@ export function Navbar({
                   closeMenus();
                   logout();
                 }}
-                className="w-full p-2.5 text-right rounded-xl bg-slate-50 hover:bg-rose-50 flex items-center justify-between text-xs font-bold text-rose-600 mt-2 cursor-pointer border border-slate-200"
+                className="w-full p-2 text-right rounded-xl bg-slate-50 hover:bg-rose-50 flex items-center justify-between text-xs font-bold text-rose-600 mt-2 cursor-pointer border border-slate-200"
               >
                 <div className="flex items-center gap-2">
                   <LogOut className="w-4 h-4" />

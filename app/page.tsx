@@ -61,6 +61,8 @@ import { AuthGate } from '@/components/AuthGate';
 import { Navbar } from '@/components/Navbar';
 import { StatsOverview } from '@/components/StatsOverview';
 import { InvoiceList } from '@/components/InvoiceList';
+import { DashboardOverview } from '@/components/DashboardOverview';
+import { ExpensesPayrollView } from '@/components/ExpensesPayrollView';
 import { InvoiceModal } from '@/components/InvoiceModal';
 import { InvoiceViewModal } from '@/components/InvoiceViewModal';
 import { CustomerLedgerModal } from '@/components/CustomerLedgerModal';
@@ -90,7 +92,10 @@ import {
   Receipt,
   UserPlus,
   Lock,
-  Sparkles
+  Sparkles,
+  LayoutDashboard,
+  TrendingDown,
+  DollarSign
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -106,8 +111,8 @@ function InvoicesDashboard() {
   const [salaryPayments, setSalaryPayments] = useState<SalaryPaymentRecord[]>(() => getStoredSalaryPayments());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
 
-  // Main Dashboard View Mode: 'MERCHANTS' (حسابات التجار) vs 'INVOICES' (سجل الفواتير)
-  const [mainView, setMainView] = useState<'MERCHANTS' | 'INVOICES'>('MERCHANTS');
+  // Main ERP Module View Mode: 'DASHBOARD' | 'CUSTOMERS' | 'INVOICES' | 'EXPENSES'
+  const [mainView, setMainView] = useState<'DASHBOARD' | 'CUSTOMERS' | 'INVOICES' | 'EXPENSES'>('DASHBOARD');
 
   // Toast / Alert Notification State
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -831,126 +836,86 @@ function InvoicesDashboard() {
         onOpenTeamManagement={() => setIsTeamModalOpen(true)}
         onOpenSecretVault={() => setIsSecretVaultOpen(true)}
         onOpenCourierSettlements={() => setIsCourierModalOpen(true)}
-        onOpenExpensesPayroll={() => setIsExpensesPayrollOpen(true)}
+        onOpenExpensesPayroll={() => setMainView('EXPENSES')}
         onExportCSV={handleExportCSV}
         onClearData={handleClearAllData}
         invoicesCount={invoices.length}
         courierCount={courierSettlements.length}
         expensesCount={expenses.length}
+        currentView={mainView}
+        onSelectView={(v) => setMainView(v)}
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6">
         
-        {/* Quick Header Banner with View Tabs */}
-        <div className="bg-gradient-to-l from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-5 sm:p-7 text-white shadow-lg shadow-slate-900/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print relative overflow-hidden">
-          
-          {/* Subtle decoration */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="space-y-1.5 z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/80 border border-emerald-800/80 text-emerald-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>مشروع Firebase النشط: <strong className="font-mono text-white">{projectId}</strong></span>
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-              منظومة حسابات التجار والفواتير السحابية
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              إدارة الحسابات الجارية لكل تاجر، متابعة إجمالي ما طلبه كل عميل من كل منتج، وتسجيل مسحوبات البضاعة والدفعات بنقرة واحدة.
-            </p>
-          </div>
-
-          {/* Quick Actions & Header Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 z-10 w-full md:w-auto">
-            
-            {/* Customer Product Demand Shortcut */}
+        {/* Module Navigation Switcher (Dashboard, Customers, Invoices, Expenses) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs no-print gap-2">
+          <div className="flex items-center gap-1 overflow-x-auto p-0.5">
             <button
-              onClick={() => handleOpenCustomerProductsSummary()}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-teal-200 bg-slate-800/90 hover:bg-slate-700 border border-teal-500/40 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
-              title="تقرير إجمالي ما طلبه كل عميل من كل صنف عبر جميع الفواتير"
-            >
-              <Package className="w-4 h-4 text-teal-400" />
-              <span>مسحوبات كل عميل</span>
-            </button>
-
-            {/* Secret Vault Shortcut Button */}
-            <button
-              onClick={() => setIsSecretVaultOpen(true)}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-black text-slate-950 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 rounded-xl shadow-md shadow-amber-400/20 transition-all cursor-pointer whitespace-nowrap"
-              title="خزنة وهوامش الأرباح السرية بين أسعار المصنع والشركة والتجار"
-            >
-              <Lock className="w-4 h-4" />
-              <span>خزنة الأرباح</span>
-            </button>
-
-            {/* Expenses & Payroll Shortcut Button */}
-            <button
-              onClick={() => setIsExpensesPayrollOpen(true)}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-bold text-rose-100 bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap"
-              title="المصروفات التشغيلية ورواتب الموظفين"
-            >
-              <span>المصروفات والرواتب</span>
-              {expenses.length > 0 && (
-                <span className="w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-bold">
-                  {expenses.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setIsNewMerchantModalOpen(true)}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 active:bg-teal-800 rounded-xl shadow-md shadow-teal-600/30 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>+ فتح حساب تاجر</span>
-            </button>
-
-            <button
-              onClick={handleNewInvoice}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-md shadow-emerald-600/30 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <FilePlus className="w-4 h-4" />
-              <span>فاتورة جديدة</span>
-            </button>
-          </div>
-
-        </div>
-
-        {/* View Mode Switcher (حسابات التجار vs سجل الفواتير) */}
-        <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200 shadow-2xs no-print">
-          <div className="flex items-center gap-1.5 w-full sm:w-auto">
-            <button
-              onClick={() => setMainView('MERCHANTS')}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                mainView === 'MERCHANTS'
-                  ? 'bg-slate-900 text-white shadow-sm'
+              onClick={() => setMainView('DASHBOARD')}
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                mainView === 'DASHBOARD'
+                  ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <Building2 className="w-4 h-4 text-emerald-400" />
-              <span>حسابات التجار والعملاء (كشف الحساب الجاري)</span>
+              <LayoutDashboard className={`w-4 h-4 ${mainView === 'DASHBOARD' ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <span>لوحة التحكم الرئيسية</span>
+            </button>
+
+            <button
+              onClick={() => setMainView('CUSTOMERS')}
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                mainView === 'CUSTOMERS'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Building2 className={`w-4 h-4 ${mainView === 'CUSTOMERS' ? 'text-teal-400' : 'text-slate-500'}`} />
+              <span>العملاء والحسابات الجارية</span>
             </button>
 
             <button
               onClick={() => setMainView('INVOICES')}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
                 mainView === 'INVOICES'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <Receipt className="w-4 h-4 text-teal-400" />
-              <span>سجل الفواتير العامة ({invoices.length})</span>
+              <Receipt className={`w-4 h-4 ${mainView === 'INVOICES' ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <span>سجل الفواتير ({invoices.length})</span>
+            </button>
+
+            <button
+              onClick={() => setMainView('EXPENSES')}
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                mainView === 'EXPENSES'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <DollarSign className={`w-4 h-4 ${mainView === 'EXPENSES' ? 'text-rose-400' : 'text-slate-500'}`} />
+              <span>المصروفات والرواتب</span>
+              {expenses.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold font-mono">
+                  {expenses.length}
+                </span>
+              )}
             </button>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 pl-3">
+          <div className="hidden md:flex items-center gap-3 text-xs text-slate-500 pl-3">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/80">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>{projectId}</span>
+            </span>
             <button
               onClick={handleTestFirebaseConnection}
               disabled={testingFirebase}
               className="text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+              title="فحص الاتصال بقاعدة بيانات Firebase"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${testingFirebase ? 'animate-spin' : ''}`} />
               <span>فحص الاتصال</span>
@@ -959,8 +924,23 @@ function InvoicesDashboard() {
         </div>
 
         {/* Dynamic View Content */}
-        {mainView === 'MERCHANTS' ? (
-          /* VIEW 1: Merchant Accounts Hub */
+        {mainView === 'DASHBOARD' && (
+          <DashboardOverview
+            invoices={invoices}
+            onNewInvoice={handleNewInvoice}
+            onViewInvoice={handleViewInvoice}
+            onQuickPay={handleQuickPay}
+            onOpenCustomersView={() => setMainView('CUSTOMERS')}
+            onOpenInvoicesView={() => setMainView('INVOICES')}
+            onOpenExpensesView={() => setMainView('EXPENSES')}
+            onOpenNewMerchant={() => setIsNewMerchantModalOpen(true)}
+            onOpenAddPayment={handleOpenAddPayment}
+            onOpenStatement={handleOpenStatement}
+            onOpenCustomerProductsSummary={handleOpenCustomerProductsSummary}
+          />
+        )}
+
+        {mainView === 'CUSTOMERS' && (
           <MerchantAccountsView
             invoices={invoices}
             productCatalog={products}
@@ -969,27 +949,39 @@ function InvoicesDashboard() {
             onOpenAddPayment={handleOpenAddPayment}
             onOpenStatement={handleOpenStatement}
             onOpenProductsSummary={handleOpenCustomerProductsSummary}
+            onViewInvoice={handleViewInvoice}
           />
-        ) : (
-          /* VIEW 2: Invoices Timeline & KPIs */
-          <div className="space-y-6">
-            <StatsOverview
-              invoices={invoices}
-              onFilterStatus={setActiveStatusFilter}
-              activeStatusFilter={activeStatusFilter}
-            />
+        )}
 
-            <InvoiceList
-              invoices={invoices}
-              onViewInvoice={handleViewInvoice}
-              onEditInvoice={handleEditInvoice}
-              onDuplicateInvoice={handleDuplicateInvoice}
-              onDeleteInvoice={handleDeleteInvoice}
-              onQuickPay={handleQuickPay}
-              activeStatusFilter={activeStatusFilter}
-              onStatusFilterChange={setActiveStatusFilter}
-            />
-          </div>
+        {mainView === 'INVOICES' && (
+          <InvoiceList
+            invoices={invoices}
+            onViewInvoice={handleViewInvoice}
+            onEditInvoice={handleEditInvoice}
+            onDuplicateInvoice={handleDuplicateInvoice}
+            onDeleteInvoice={handleDeleteInvoice}
+            onQuickPay={handleQuickPay}
+            activeStatusFilter={activeStatusFilter}
+            onStatusFilterChange={setActiveStatusFilter}
+            onNewInvoice={handleNewInvoice}
+            onExportCSV={handleExportCSV}
+          />
+        )}
+
+        {mainView === 'EXPENSES' && (
+          <ExpensesPayrollView
+            expenses={expenses}
+            employees={employees}
+            salaryPayments={salaryPayments}
+            invoices={invoices}
+            onSaveExpense={handleSaveExpense}
+            onDeleteExpense={handleDeleteExpense}
+            onSaveEmployee={handleSaveEmployee}
+            onDeleteEmployee={handleDeleteEmployee}
+            onSaveSalaryPayment={handleSaveSalaryPayment}
+            onDeleteSalaryPayment={handleDeleteSalaryPayment}
+            currentUserEmail={user?.email}
+          />
         )}
 
       </main>
