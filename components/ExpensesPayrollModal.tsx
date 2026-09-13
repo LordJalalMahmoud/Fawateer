@@ -1095,8 +1095,33 @@ export function ExpensesPayrollModal({
       const netToPay = Math.max(0, salBaseSalary + salAllowances + salBonuses + salCommissions - salDeductions - salAdvances);
       const nowIso = new Date().toISOString();
 
-      // If editing existing payment, preserve record ID so it updates in-place without duplicating
-      const recordId = editingSalaryPayment?.id || `sal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      // Determine record ID: prefer editingSalaryPayment.id or fallback to existing payment in selectedPayrollMonth
+      let recordId = editingSalaryPayment?.id;
+      if (!recordId) {
+        const existingInCurrent = salaryPayments.find(
+          p => p.employeeId === disbursingEmployee.id && (p.salaryMonth || p.month) === selectedPayrollMonth
+        );
+        if (existingInCurrent) {
+          recordId = existingInCurrent.id;
+        }
+      }
+      if (!recordId) {
+        recordId = `sal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      }
+
+      // If moving salary to a different month, ensure any duplicate/orphaned payment record in selectedPayrollMonth is cleaned up
+      if (selectedPayrollMonth !== salMonth) {
+        const otherPaymentsInOldMonth = salaryPayments.filter(
+          p => p.employeeId === disbursingEmployee.id && p.id !== recordId && (p.salaryMonth || p.month) === selectedPayrollMonth
+        );
+        for (const orphan of otherPaymentsInOldMonth) {
+          try {
+            await onDeleteSalaryPayment(orphan.id);
+          } catch (err) {
+            console.warn('Failed to clean up old month salary duplicate:', err);
+          }
+        }
+      }
       const paymentRecord: SalaryPaymentRecord = {
         id: recordId,
         employeeId: disbursingEmployee.id,
@@ -2739,7 +2764,7 @@ export function ExpensesPayrollModal({
 
                           <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
                             <button
-                              onClick={() => handleOpenDisburseSalary(emp)}
+                              onClick={() => handleOpenDisburseSalary(emp, currentMonthPayment)}
                               className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                                 isPaidThisMonth
                                   ? 'bg-purple-950/60 text-purple-300 border border-purple-800/40 hover:bg-purple-900/60'
@@ -3131,14 +3156,28 @@ export function ExpensesPayrollModal({
                                     {isPaid ? 'تعديل الراتب' : 'صرف الآن'}
                                   </button>
                                   {isPaid && payment && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setSalarySlipToPrint(payment)}
-                                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-purple-300 rounded-xl transition-all cursor-pointer border border-slate-700"
-                                      title="طباعة إيصال / سند صرف الراتب"
-                                    >
-                                      <Printer className="w-4 h-4" />
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSalarySlipToPrint(payment)}
+                                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-purple-300 rounded-xl transition-all cursor-pointer border border-slate-700"
+                                        title="طباعة إيصال / سند صرف الراتب"
+                                      >
+                                        <Printer className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (confirm(`هل أنت متأكد من رغبتك في إلغاء وحذف صرف راتب الموظف (${employee.name}) لشهر (${formatArabicMonth(payment.salaryMonth || payment.month)})؟`)) {
+                                            await onDeleteSalaryPayment(payment.id);
+                                          }
+                                        }}
+                                        className="p-1.5 bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 rounded-xl transition-all cursor-pointer border border-slate-700"
+                                        title="إلغاء وحذف سجل الصرف"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </td>

@@ -395,16 +395,18 @@ function InvoicesDashboard() {
 
   // Actions: Salary Payments
   const handleSaveSalaryPayment = async (payment: SalaryPaymentRecord) => {
-    const existingIndex = salaryPayments.findIndex(p => p.id === payment.id);
-    let updated: SalaryPaymentRecord[];
-    if (existingIndex >= 0) {
-      updated = [...salaryPayments];
-      updated[existingIndex] = payment;
-    } else {
-      updated = [payment, ...salaryPayments];
-    }
-    setSalaryPayments(updated);
-    saveStoredSalaryPayments(updated);
+    setSalaryPayments(prev => {
+      const existingIndex = prev.findIndex(p => p.id === payment.id);
+      let updated: SalaryPaymentRecord[];
+      if (existingIndex >= 0) {
+        updated = [...prev];
+        updated[existingIndex] = payment;
+      } else {
+        updated = [payment, ...prev];
+      }
+      saveStoredSalaryPayments(updated);
+      return updated;
+    });
     confetti({ particleCount: 40, spread: 50 });
 
     try {
@@ -417,9 +419,11 @@ function InvoicesDashboard() {
   };
 
   const handleDeleteSalaryPayment = async (paymentId: string) => {
-    const updated = salaryPayments.filter(p => p.id !== paymentId);
-    setSalaryPayments(updated);
-    saveStoredSalaryPayments(updated);
+    setSalaryPayments(prev => {
+      const updated = prev.filter(p => p.id !== paymentId);
+      saveStoredSalaryPayments(updated);
+      return updated;
+    });
 
     try {
       await deleteSalaryPaymentFromFirestore(paymentId);
