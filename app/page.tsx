@@ -58,7 +58,7 @@ import {
 } from '@/lib/firestore-service';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { AuthGate } from '@/components/AuthGate';
-import { Navbar } from '@/components/Navbar';
+import { AppShell, ActiveModule } from '@/components/AppShell';
 import { StatsOverview } from '@/components/StatsOverview';
 import { InvoiceList } from '@/components/InvoiceList';
 import { DashboardOverview } from '@/components/DashboardOverview';
@@ -111,8 +111,8 @@ function InvoicesDashboard() {
   const [salaryPayments, setSalaryPayments] = useState<SalaryPaymentRecord[]>(() => getStoredSalaryPayments());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
 
-  // Main ERP Module View Mode: 'DASHBOARD' | 'CUSTOMERS' | 'INVOICES' | 'EXPENSES'
-  const [mainView, setMainView] = useState<'DASHBOARD' | 'CUSTOMERS' | 'INVOICES' | 'EXPENSES'>('DASHBOARD');
+  // Main ERP Module View Mode
+  const [mainView, setMainView] = useState<ActiveModule>('DASHBOARD');
 
   // Toast / Alert Notification State
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -801,8 +801,25 @@ function InvoicesDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/80 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      
+    <AppShell
+      activeModule={mainView}
+      onSelectModule={(mod) => setMainView(mod)}
+      onNewInvoice={handleNewInvoice}
+      onOpenCustomerLedger={() => setIsCustomerLedgerOpen(true)}
+      onOpenCustomerProductsSummary={() => handleOpenCustomerProductsSummary()}
+      onOpenCatalog={() => setIsProductCatalogOpen(true)}
+      onOpenTeamManagement={() => setIsTeamModalOpen(true)}
+      onOpenSecretVault={() => setIsSecretVaultOpen(true)}
+      onOpenCourierSettlements={() => setIsCourierModalOpen(true)}
+      onExportCSV={handleExportCSV}
+      onClearData={handleClearAllData}
+      onTestFirebase={handleTestFirebaseConnection}
+      testingFirebase={testingFirebase}
+      invoicesCount={invoices.length}
+      courierCount={courierSettlements.length}
+      expensesCount={expenses.length}
+      syncStatus={syncStatus}
+    >
       {/* Toast Alert Banner */}
       {toast && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom duration-300 max-w-lg w-[90%] sm:w-auto">
@@ -827,207 +844,99 @@ function InvoicesDashboard() {
         </div>
       )}
 
-      {/* Top Navbar */}
-      <Navbar
-        onNewInvoice={handleNewInvoice}
-        onOpenCustomerLedger={() => setIsCustomerLedgerOpen(true)}
-        onOpenCustomerProductsSummary={() => handleOpenCustomerProductsSummary()}
-        onOpenCatalog={() => setIsProductCatalogOpen(true)}
-        onOpenTeamManagement={() => setIsTeamModalOpen(true)}
-        onOpenSecretVault={() => setIsSecretVaultOpen(true)}
-        onOpenCourierSettlements={() => setIsCourierModalOpen(true)}
-        onOpenExpensesPayroll={() => setMainView('EXPENSES')}
-        onExportCSV={handleExportCSV}
-        onClearData={handleClearAllData}
-        invoicesCount={invoices.length}
-        courierCount={courierSettlements.length}
-        expensesCount={expenses.length}
-        currentView={mainView}
-        onSelectView={(v) => setMainView(v)}
-      />
+      {/* Dynamic Module Content */}
+      {mainView === 'DASHBOARD' && (
+        <DashboardOverview
+          invoices={invoices}
+          onNewInvoice={handleNewInvoice}
+          onViewInvoice={handleViewInvoice}
+          onQuickPay={handleQuickPay}
+          onOpenCustomersView={() => setMainView('CUSTOMERS')}
+          onOpenInvoicesView={() => setMainView('INVOICES')}
+          onOpenExpensesView={() => setMainView('EXPENSES')}
+          onOpenNewMerchant={() => setIsNewMerchantModalOpen(true)}
+          onOpenAddPayment={handleOpenAddPayment}
+          onOpenStatement={handleOpenStatement}
+          onOpenCustomerProductsSummary={handleOpenCustomerProductsSummary}
+        />
+      )}
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6">
-        
-        {/* Module Navigation Switcher (Dashboard, Customers, Invoices, Expenses) */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200 shadow-2xs no-print gap-2">
-          <div className="flex items-center gap-1 overflow-x-auto p-0.5">
-            <button
-              onClick={() => setMainView('DASHBOARD')}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
-                mainView === 'DASHBOARD'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <LayoutDashboard className={`w-4 h-4 ${mainView === 'DASHBOARD' ? 'text-emerald-400' : 'text-slate-500'}`} />
-              <span>لوحة التحكم الرئيسية</span>
-            </button>
+      {mainView === 'CUSTOMERS' && (
+        <MerchantAccountsView
+          invoices={invoices}
+          productCatalog={products}
+          onOpenNewMerchant={() => setIsNewMerchantModalOpen(true)}
+          onOpenAddGoods={handleOpenAddGoods}
+          onOpenAddPayment={handleOpenAddPayment}
+          onOpenStatement={handleOpenStatement}
+          onOpenProductsSummary={handleOpenCustomerProductsSummary}
+          onViewInvoice={handleViewInvoice}
+        />
+      )}
 
-            <button
-              onClick={() => setMainView('CUSTOMERS')}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
-                mainView === 'CUSTOMERS'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Building2 className={`w-4 h-4 ${mainView === 'CUSTOMERS' ? 'text-teal-400' : 'text-slate-500'}`} />
-              <span>العملاء والحسابات الجارية</span>
-            </button>
+      {mainView === 'INVOICES' && (
+        <InvoiceList
+          invoices={invoices}
+          onViewInvoice={handleViewInvoice}
+          onEditInvoice={handleEditInvoice}
+          onDuplicateInvoice={handleDuplicateInvoice}
+          onDeleteInvoice={handleDeleteInvoice}
+          onQuickPay={handleQuickPay}
+          activeStatusFilter={activeStatusFilter}
+          onStatusFilterChange={setActiveStatusFilter}
+          onNewInvoice={handleNewInvoice}
+          onExportCSV={handleExportCSV}
+        />
+      )}
 
-            <button
-              onClick={() => setMainView('INVOICES')}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
-                mainView === 'INVOICES'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Receipt className={`w-4 h-4 ${mainView === 'INVOICES' ? 'text-emerald-400' : 'text-slate-500'}`} />
-              <span>سجل الفواتير ({invoices.length})</span>
-            </button>
+      {mainView === 'COLLECTIONS' && (
+        <InvoiceList
+          invoices={invoices.filter(i => (i.paidAmount || 0) > 0)}
+          onViewInvoice={handleViewInvoice}
+          onEditInvoice={handleEditInvoice}
+          onDuplicateInvoice={handleDuplicateInvoice}
+          onDeleteInvoice={handleDeleteInvoice}
+          onQuickPay={handleQuickPay}
+          activeStatusFilter="ALL"
+          onStatusFilterChange={() => {}}
+          onNewInvoice={handleNewInvoice}
+          onExportCSV={handleExportCSV}
+        />
+      )}
 
-            <button
-              onClick={() => setMainView('EXPENSES')}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
-                mainView === 'EXPENSES'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <DollarSign className={`w-4 h-4 ${mainView === 'EXPENSES' ? 'text-rose-400' : 'text-slate-500'}`} />
-              <span>المصروفات والرواتب</span>
-              {expenses.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold font-mono">
-                  {expenses.length}
-                </span>
-              )}
-            </button>
-          </div>
+      {mainView === 'EXPENSES' && (
+        <ExpensesPayrollView
+          expenses={expenses}
+          employees={employees}
+          salaryPayments={salaryPayments}
+          invoices={invoices}
+          onSaveExpense={handleSaveExpense}
+          onDeleteExpense={handleDeleteExpense}
+          onSaveEmployee={handleSaveEmployee}
+          onDeleteEmployee={handleDeleteEmployee}
+          onSaveSalaryPayment={handleSaveSalaryPayment}
+          onDeleteSalaryPayment={handleDeleteSalaryPayment}
+          currentUserEmail={user?.email}
+          initialTab="EXPENSES"
+        />
+      )}
 
-          <div className="hidden md:flex items-center gap-3 text-xs text-slate-500 pl-3">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/80">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>{projectId}</span>
-            </span>
-            <button
-              onClick={handleTestFirebaseConnection}
-              disabled={testingFirebase}
-              className="text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
-              title="فحص الاتصال بقاعدة بيانات Firebase"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${testingFirebase ? 'animate-spin' : ''}`} />
-              <span>فحص الاتصال</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Dynamic View Content */}
-        {mainView === 'DASHBOARD' && (
-          <DashboardOverview
-            invoices={invoices}
-            onNewInvoice={handleNewInvoice}
-            onViewInvoice={handleViewInvoice}
-            onQuickPay={handleQuickPay}
-            onOpenCustomersView={() => setMainView('CUSTOMERS')}
-            onOpenInvoicesView={() => setMainView('INVOICES')}
-            onOpenExpensesView={() => setMainView('EXPENSES')}
-            onOpenNewMerchant={() => setIsNewMerchantModalOpen(true)}
-            onOpenAddPayment={handleOpenAddPayment}
-            onOpenStatement={handleOpenStatement}
-            onOpenCustomerProductsSummary={handleOpenCustomerProductsSummary}
-          />
-        )}
-
-        {mainView === 'CUSTOMERS' && (
-          <MerchantAccountsView
-            invoices={invoices}
-            productCatalog={products}
-            onOpenNewMerchant={() => setIsNewMerchantModalOpen(true)}
-            onOpenAddGoods={handleOpenAddGoods}
-            onOpenAddPayment={handleOpenAddPayment}
-            onOpenStatement={handleOpenStatement}
-            onOpenProductsSummary={handleOpenCustomerProductsSummary}
-            onViewInvoice={handleViewInvoice}
-          />
-        )}
-
-        {mainView === 'INVOICES' && (
-          <InvoiceList
-            invoices={invoices}
-            onViewInvoice={handleViewInvoice}
-            onEditInvoice={handleEditInvoice}
-            onDuplicateInvoice={handleDuplicateInvoice}
-            onDeleteInvoice={handleDeleteInvoice}
-            onQuickPay={handleQuickPay}
-            activeStatusFilter={activeStatusFilter}
-            onStatusFilterChange={setActiveStatusFilter}
-            onNewInvoice={handleNewInvoice}
-            onExportCSV={handleExportCSV}
-          />
-        )}
-
-        {mainView === 'EXPENSES' && (
-          <ExpensesPayrollView
-            expenses={expenses}
-            employees={employees}
-            salaryPayments={salaryPayments}
-            invoices={invoices}
-            onSaveExpense={handleSaveExpense}
-            onDeleteExpense={handleDeleteExpense}
-            onSaveEmployee={handleSaveEmployee}
-            onDeleteEmployee={handleDeleteEmployee}
-            onSaveSalaryPayment={handleSaveSalaryPayment}
-            onDeleteSalaryPayment={handleDeleteSalaryPayment}
-            currentUserEmail={user?.email}
-          />
-        )}
-
-      </main>
-
-      {/* Footer */}
-      <footer className="mt-auto border-t border-slate-200 bg-white py-5 text-center text-xs text-slate-500 no-print">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span>منظومة إدارة حسابات التجار ومبيعات المنظفات • متصل سحابياً</span>
-            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              <Check className="w-3 h-3 text-emerald-600" />
-              {syncStatus === 'synced' ? 'متزامن لحظياً مع Firestore' : syncStatus === 'syncing' ? 'جارِ المزامنة...' : 'يعمل محلياً'}
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsSecretVaultOpen(true)}
-              className="text-amber-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
-            >
-              <Lock className="w-3 h-3" />
-              <span>خزنة الأرباح</span>
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setIsTeamModalOpen(true)}
-              className="text-teal-700 hover:underline cursor-pointer"
-            >
-              المدراء المصرح لهم
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setIsProductCatalogOpen(true)}
-              className="text-slate-700 hover:underline cursor-pointer"
-            >
-              دليل الأسعار
-            </button>
-            <span>•</span>
-            <button
-              onClick={handleExportCSV}
-              className="text-slate-700 hover:underline cursor-pointer"
-            >
-              تصدير البيانات
-            </button>
-          </div>
-        </div>
-      </footer>
+      {mainView === 'PAYROLL' && (
+        <ExpensesPayrollView
+          expenses={expenses}
+          employees={employees}
+          salaryPayments={salaryPayments}
+          invoices={invoices}
+          onSaveExpense={handleSaveExpense}
+          onDeleteExpense={handleDeleteExpense}
+          onSaveEmployee={handleSaveEmployee}
+          onDeleteEmployee={handleDeleteEmployee}
+          onSaveSalaryPayment={handleSaveSalaryPayment}
+          onDeleteSalaryPayment={handleDeleteSalaryPayment}
+          currentUserEmail={user?.email}
+          initialTab="PAYROLL"
+        />
+      )}
 
       {/* MODALS */}
       {/* 1. Create/Edit Invoice Modal */}
@@ -1197,7 +1106,7 @@ function InvoicesDashboard() {
         initialSelectedCustomer={productsSummaryCustomer}
       />
 
-    </div>
+    </AppShell>
   );
 }
 

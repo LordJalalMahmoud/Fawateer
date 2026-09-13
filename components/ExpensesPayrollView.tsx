@@ -157,6 +157,7 @@ export interface ExpensesPayrollViewProps {
   onSaveSalaryPayment: (payment: SalaryPaymentRecord, autoCreateExpense?: boolean) => Promise<void>;
   onDeleteSalaryPayment: (paymentId: string) => Promise<void>;
   currentUserEmail?: string | null;
+  initialTab?: 'EXPENSES' | 'PAYROLL' | 'PARTNER_SHEET' | 'EMPLOYEES' | 'ANALYTICS';
   isModal?: boolean;
   onClose?: () => void;
 }
@@ -173,13 +174,20 @@ export function ExpensesPayrollView({
   onSaveSalaryPayment,
   onDeleteSalaryPayment,
   currentUserEmail,
+  initialTab = 'EXPENSES',
   isModal = false,
   onClose,
 }: ExpensesPayrollViewProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
   // Main navigation tabs (Req.txt #6: المصروفات | الرواتب | حركات الرواتب / مسحوبات الشركاء)
-  const [activeTab, setActiveTab] = useState<'EXPENSES' | 'PAYROLL' | 'PARTNER_SHEET' | 'EMPLOYEES' | 'ANALYTICS'>('EXPENSES');
+  const [activeTab, setActiveTab] = useState<'EXPENSES' | 'PAYROLL' | 'PARTNER_SHEET' | 'EMPLOYEES' | 'ANALYTICS'>(initialTab);
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Filters for Expenses
   const currentMonthStr = new Date().toISOString().slice(0, 7);
