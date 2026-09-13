@@ -129,17 +129,6 @@ export function Navbar({
                 <span className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight whitespace-nowrap group-hover:text-emerald-800 transition-colors">
                   إدارة الفواتير والتحصيلات
                 </span>
-                
-                {/* Subtle Workspace Pill */}
-                {projectId && (
-                  <span 
-                    className="hidden xl:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium text-slate-500 bg-slate-100 border border-slate-200" 
-                    title={`متصل بمشروع Firebase: ${projectId}`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="truncate max-w-[110px]">{projectId}</span>
-                  </span>
-                )}
               </div>
               
               <span className="hidden sm:inline text-[11px] text-slate-500 font-medium truncate max-w-[240px]">
@@ -541,12 +530,6 @@ export function Navbar({
                         <ShieldCheck className="w-3 h-3 text-emerald-600" />
                         <span>صلاحية كاملة (Admin)</span>
                       </div>
-                      {projectId && (
-                        <div className="text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-200/60 flex items-center gap-1">
-                          <Database className="w-2.5 h-2.5 text-slate-400" />
-                          <span className="truncate">{projectId}</span>
-                        </div>
-                      )}
                     </div>
 
                     <button

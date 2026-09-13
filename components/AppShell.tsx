@@ -186,17 +186,6 @@ export const AppShell: React.FC<AppShellProps> = ({
               </span>
             </div>
           </div>
-
-          <div className="hidden md:block h-4 w-px bg-slate-200 mx-1"></div>
-
-          {/* Workspace / Project Selector Indicator */}
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100/80 border border-slate-200 text-xs text-slate-600">
-            <Building2 className="w-3.5 h-3.5 text-slate-500" />
-            <span className="font-mono text-[11px] font-semibold truncate max-w-[140px] text-slate-800" title={projectId || 'Workspace'}>
-              {projectId || 'LordJalalMahmoud/Fawateer'}
-            </span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="المزامنة نشطة"></span>
-          </div>
         </div>
 
         {/* Left Section (in RTL): Primary Action + Sync Status + User Menu */}
@@ -211,19 +200,20 @@ export const AppShell: React.FC<AppShellProps> = ({
             <span>فاتورة جديدة</span>
           </button>
 
-          {/* Cloud Sync Status Pill */}
-          <div 
+          {/* Connection / Sync Status Pill */}
+          <button 
+            type="button"
             onClick={onTestFirebase}
-            className={`hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-semibold border cursor-pointer transition-colors ${
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-semibold border cursor-pointer transition-colors ${
               syncStatus === 'synced'
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100/70'
                 : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100/70'
             }`}
-            title="فحص حالة الاتصال بقاعدة بيانات Firebase"
+            title="فحص جودة واستقرار الاتصال"
           >
             <RefreshCw className={`w-3 h-3 text-emerald-600 ${testingFirebase ? 'animate-spin' : ''}`} />
             <span>{syncStatus === 'synced' ? 'متزامن' : 'جارِ المزامنة'}</span>
-          </div>
+          </button>
 
           {/* User Profile & Session Dropdown */}
           <div className="relative" ref={userMenuRef}>
@@ -375,7 +365,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             <div className="flex items-center gap-2">
               <span className="font-semibold text-slate-700">منظومة فواتير ERP لإدارة الحسابات</span>
               <span>•</span>
-              <span className="text-[11px] text-slate-500">متصل سحابياً مع قاعدة بيانات Firebase</span>
+              <span className="text-[11px] text-slate-500">متصل سحابياً ومحدث</span>
             </div>
             <div className="flex items-center gap-4 text-[11px] text-slate-500 font-mono">
               <span>{new Date().toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' })}</span>

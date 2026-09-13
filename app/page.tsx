@@ -789,12 +789,12 @@ function InvoicesDashboard() {
     try {
       const res = await testFirestoreDirectWrite();
       if (res.success) {
-        showToast(`✅ ${res.message} (مشروع: ${projectId})`, 'success');
+        showToast('الاتصال سليم وشغال تمام ✅', 'success');
       } else {
-        showToast(`❌ ${res.message}: ${res.error}`, 'error');
+        showToast('تعذر الاتصال بالخادم، يرجى فحص الإنترنت ❌', 'error');
       }
-    } catch (e: any) {
-      showToast(`❌ خطأ اختبار الاتصال: ${e?.message || e}`, 'error');
+    } catch {
+      showToast('تعذر الاتصال بالخادم، يرجى فحص الإنترنت ❌', 'error');
     } finally {
       setTestingFirebase(false);
     }
