@@ -337,21 +337,25 @@ export const AppShell: React.FC<AppShellProps> = ({
         )}
 
         {/* MAIN WORKSPACE (Takes the LEFT side in RTL) */}
-        <div className="flex-1 min-w-0 bg-slate-50/70 flex flex-col">
+        <div className="flex-1 min-w-0 bg-white flex flex-col">
           
           {/* Breadcrumb Navigation Strip */}
-          <div className="px-4 sm:px-6 lg:px-8 pt-4 pb-1 no-print">
-            <nav aria-label="مسار التنقل" className="flex items-center gap-1.5 text-xs text-slate-500 bg-white/80 backdrop-blur-xs py-1.5 px-3 rounded-xl border border-slate-200/80 shadow-2xs w-fit">
+          <div className="px-4 sm:px-6 lg:px-8 pt-5 pb-1 no-print">
+            <nav aria-label="مسار التنقل" className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
               <span
                 onClick={() => onSelectModule('DASHBOARD')}
-                className="hover:text-emerald-700 cursor-pointer transition-colors font-medium"
+                className="hover:text-emerald-700 cursor-pointer transition-colors"
               >
                 الرئيسية
               </span>
-              <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-slate-400">{breadcrumb.group}</span>
-              <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
-              <span className="font-bold text-slate-900 font-sans">{breadcrumb.label}</span>
+              {activeModule !== 'DASHBOARD' && (
+                <>
+                  <ChevronLeft className="w-3.5 h-3.5 text-slate-300" />
+                  <span>{breadcrumb.group}</span>
+                </>
+              )}
+              <ChevronLeft className="w-3.5 h-3.5 text-slate-300" />
+              <span className="font-bold text-slate-800 font-sans">{breadcrumb.label}</span>
             </nav>
           </div>
 

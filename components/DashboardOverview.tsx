@@ -9,18 +9,12 @@ import {
   Users,
   CreditCard,
   FilePlus,
-  ArrowUpRight,
-  ArrowDownLeft,
   CheckCircle2,
   AlertCircle,
   Clock,
-  ExternalLink,
   DollarSign,
   Package,
-  Lock,
-  Truck,
   Building2,
-  Calendar,
   Eye,
   Plus
 } from 'lucide-react';
@@ -122,45 +116,45 @@ export function DashboardOverview({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       
-      {/* 1. Page Header (Clean open ERP header layout, not a boxed card) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
+      {/* 1. Page Header & Primary Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            لوحة التحكم والمؤشرات المالية
+            لوحة التحكم
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
             ملخص الوضع المالي الحالي، متابعة التدفقات النقدية، وآخر الفواتير والتحصيلات المسجلة.
           </p>
         </div>
 
-        {/* Primary & Secondary Actions */}
+        {/* Primary Actions */}
         <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap sm:flex-nowrap">
           <button
             onClick={onOpenNewMerchant}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            <span>فتح حساب تاجر</span>
+            <Plus className="w-4 h-4 text-slate-500" />
+            <span>+ فتح حساب تاجر</span>
           </button>
 
           <button
             onClick={onNewInvoice}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors cursor-pointer shadow-xs"
           >
             <FilePlus className="w-4 h-4" />
-            <span>فاتورة جديدة</span>
+            <span>+ فاتورة جديدة</span>
           </button>
         </div>
       </div>
 
       {/* 2. Financial Summary Strip (Toolbar-style metrics bar, flat, no cards) */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="py-2 border-b border-slate-200">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-slate-200">
           
           {/* 1. إجمالي المبيعات */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between border-b sm:border-b-0 sm:border-e border-slate-100">
+          <div className="py-3 sm:py-0 px-2 sm:px-5 flex flex-col justify-between first:pr-0">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
               <TrendingUp className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span>إجمالي المبيعات</span>
@@ -174,7 +168,7 @@ export function DashboardOverview({
           </div>
 
           {/* 2. المديونيات المعلقة */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between border-b sm:border-b-0 lg:border-e border-slate-100">
+          <div className="py-3 sm:py-0 px-2 sm:px-5 flex flex-col justify-between">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
               <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
               <span>المديونيات المعلقة</span>
@@ -183,12 +177,12 @@ export function DashboardOverview({
               {formatEGP(totalRemainingDebt)}
             </div>
             <div className="text-[11px] text-slate-400">
-              طرف {customersWithDebt.length} تاجر ومحل
+              طرف {customersWithDebt.length} تجار متأخرين
             </div>
           </div>
 
           {/* 3. التحصيلات النقدية */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between border-b sm:border-b-0 sm:border-e border-slate-100 sm:border-t lg:border-t-0">
+          <div className="py-3 sm:py-0 px-2 sm:px-5 flex flex-col justify-between">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>التحصيلات النقدية</span>
@@ -202,10 +196,10 @@ export function DashboardOverview({
           </div>
 
           {/* 4. العملاء والتجار */}
-          <div className="p-4 sm:p-5 flex flex-col justify-between sm:border-t lg:border-t-0 border-slate-100">
+          <div className="py-3 sm:py-0 px-2 sm:px-5 flex flex-col justify-between last:pl-0">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
               <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span>عدد العملاء والتجار</span>
+              <span>العملاء والتجار</span>
             </div>
             <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 tracking-tight my-1.5">
               {customerBalances.length} <span className="text-xs font-normal text-slate-400 font-sans">عميل</span>
@@ -218,182 +212,176 @@ export function DashboardOverview({
         </div>
       </div>
 
-      {/* 3. Main Content: Real Data Tables (Recent Invoices & Recent Collections) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* 3. Section: Recent Invoices (Real Data Section directly on the Workspace, NO Card) */}
+      <section className="space-y-3">
         
-        {/* Table 1: Recent Invoices (7 cols on Desktop) */}
-        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
-          
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <div className="flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-slate-600" />
-              <h2 className="text-sm font-bold text-slate-800">آخر الفواتير الصادرة</h2>
-            </div>
-            <button
-              onClick={onOpenInvoicesView}
-              className="text-xs text-emerald-700 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <span>عرض كافة الفواتير ({invoices.length})</span>
-              <ExternalLink className="w-3 h-3" />
-            </button>
+        {/* Section Header Toolbar */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-slate-500" />
+            <h2 className="text-sm sm:text-base font-bold text-slate-900">
+              آخر الفواتير المصدرة
+            </h2>
+            <span className="text-xs text-slate-400 font-mono">
+              ({invoices.length} فاتورة)
+            </span>
           </div>
 
-          <div className="overflow-x-auto flex-1">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+          <button
+            onClick={onOpenInvoicesView}
+            className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>عرض كافة الفواتير</span>
+            <span aria-hidden="true">←</span>
+          </button>
+        </div>
+
+        {/* Real Data Table (Directly in Workspace, NO Card container) */}
+        <div className="overflow-x-auto border-t border-b border-slate-200">
+          <table className="w-full text-right text-xs">
+            <thead>
+              <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">رقم الفاتورة</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">العميل</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">التاريخ</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">الإجمالي</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">المتبقي</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold text-center">الحالة</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold text-center">إجراء</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {recentInvoices.length === 0 ? (
                 <tr>
-                  <th className="py-2.5 px-3">رقم الفاتورة</th>
-                  <th className="py-2.5 px-3">العميل</th>
-                  <th className="py-2.5 px-3">التاريخ</th>
-                  <th className="py-2.5 px-3">الإجمالي</th>
-                  <th className="py-2.5 px-3">المتبقي</th>
-                  <th className="py-2.5 px-3 text-center">الحالة</th>
-                  <th className="py-2.5 px-3 text-center">إجراء</th>
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                    لا توجد فواتير مسجلة بعد
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {recentInvoices.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400">
-                      لا توجد فواتير مسجلة بعد
+              ) : (
+                recentInvoices.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
+                      {inv.invoiceNumber}
+                    </td>
+                    <td className="py-2.5 px-3 font-medium text-slate-900 whitespace-nowrap" title={inv.customerName}>
+                      {inv.customerName}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 font-mono whitespace-nowrap">
+                      {inv.date}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold font-mono text-slate-900 whitespace-nowrap">
+                      {formatEGP(inv.totalAmount)}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono whitespace-nowrap">
+                      {(inv.remainingAmount || 0) > 0 ? (
+                        <span className="font-bold text-rose-600">{formatEGP(inv.remainingAmount)}</span>
+                      ) : (
+                        <span className="text-emerald-600">0 ج.م</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      {getStatusBadge(inv.status, inv.remainingAmount)}
+                    </td>
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <button
+                        onClick={() => onViewInvoice(inv)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-slate-600 hover:text-emerald-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                        title="معاينة الفاتورة"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>معاينة</span>
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  recentInvoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
-                        {inv.invoiceNumber}
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-900 truncate max-w-[140px]" title={inv.customerName}>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+
+      {/* 4. Section: Recent Collections & Payments (Real Data Section directly on the Workspace, NO Card) */}
+      <section className="space-y-3">
+        
+        {/* Section Header Toolbar */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-slate-500" />
+            <h2 className="text-sm sm:text-base font-bold text-slate-900">
+              آخر التحصيلات وسداد الدفعات
+            </h2>
+            <span className="text-xs text-slate-400 font-mono">
+              ({recentCollections.length} عمليات مؤخرة)
+            </span>
+          </div>
+
+          <button
+            onClick={onOpenCustomersView}
+            className="text-xs font-semibold text-teal-700 hover:text-teal-800 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>كشف حساب العملاء</span>
+            <span aria-hidden="true">←</span>
+          </button>
+        </div>
+
+        {/* Real Data Table (Directly in Workspace, NO Card container) */}
+        <div className="overflow-x-auto border-t border-b border-slate-200">
+          <table className="w-full text-right text-xs">
+            <thead>
+              <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">العميل / المحل</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">التاريخ</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold">المبلغ المحصل</th>
+                <th className="py-2.5 px-3 whitespace-nowrap font-semibold text-center">الحالة</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {recentCollections.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-400">
+                    لا توجد تحصيلات نقدية مسجلة بعد
+                  </td>
+                </tr>
+              ) : (
+                recentCollections.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-2.5 px-3">
+                      <div className="font-bold text-slate-900">
                         {inv.customerName}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono whitespace-nowrap">
-                        {inv.date}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold font-mono text-slate-900 whitespace-nowrap">
-                        {formatEGP(inv.totalAmount)}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono whitespace-nowrap">
-                        {(inv.remainingAmount || 0) > 0 ? (
-                          <span className="font-bold text-rose-700">{formatEGP(inv.remainingAmount)}</span>
-                        ) : (
-                          <span className="text-emerald-700">0 ج.م</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        {getStatusBadge(inv.status, inv.remainingAmount)}
-                      </td>
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => onViewInvoice(inv)}
-                          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
-                          title="معاينة الفاتورة"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
-            <button
-              onClick={onNewInvoice}
-              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer"
-            >
-              + إنشاء فاتورة جديدة الآن
-            </button>
-          </div>
-
-        </div>
-
-        {/* Table 2: Recent Collections & Payments (5 cols on Desktop) */}
-        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
-          
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-slate-600" />
-              <h2 className="text-sm font-bold text-slate-800">آخر التحصيلات وسداد الدفعات</h2>
-            </div>
-            <button
-              onClick={onOpenCustomersView}
-              className="text-xs text-teal-700 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <span>كشف العملاء</span>
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          </div>
-
-          <div className="overflow-x-auto flex-1">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-3">العميل / المحل</th>
-                  <th className="py-2.5 px-3">التاريخ</th>
-                  <th className="py-2.5 px-3">المبلغ المحصل</th>
-                  <th className="py-2.5 px-3 text-center">الحالة</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {recentCollections.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-slate-400">
-                      لا توجد تحصيلات نقدية مسجلة بعد
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        {inv.invoiceNumber}
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 font-mono whitespace-nowrap">
+                      {inv.date}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold font-mono text-emerald-600 whitespace-nowrap">
+                      {formatEGP(inv.paidAmount)}
+                    </td>
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      {inv.remainingAmount <= 0 ? (
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                          سداد تام
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                          دفعة جزئية
+                        </span>
+                      )}
                     </td>
                   </tr>
-                ) : (
-                  recentCollections.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3">
-                        <div className="font-bold text-slate-900 truncate max-w-[130px]" title={inv.customerName}>
-                          {inv.customerName}
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {inv.invoiceNumber}
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono whitespace-nowrap">
-                        {inv.date}
-                      </td>
-                      <td className="py-2.5 px-3 font-bold font-mono text-emerald-700 whitespace-nowrap">
-                        {formatEGP(inv.paidAmount)}
-                      </td>
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        {inv.remainingAmount <= 0 ? (
-                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
-                            سداد تام
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                            دفعة جزئية
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
-            <button
-              onClick={onOpenCustomersView}
-              className="text-xs font-bold text-teal-700 hover:text-teal-800 cursor-pointer"
-            >
-              عرض أرصدة وحسابات التجار ←
-            </button>
-          </div>
-
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
 
-      </div>
+      </section>
 
-      {/* 4. Quick Operational Shortcuts Bar */}
-      <div className="bg-slate-100/70 border border-slate-200/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+      {/* 5. Quick Operational Shortcuts Bar (Compact Action Bar, flat, no card) */}
+      <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <span className="font-semibold text-slate-600 flex items-center gap-1.5">
           <Building2 className="w-3.5 h-3.5 text-slate-500" />
           <span>اختصارات العمليات السريعة:</span>
@@ -403,27 +391,27 @@ export function DashboardOverview({
           {onOpenCustomerProductsSummary && (
             <button
               onClick={() => onOpenCustomerProductsSummary()}
-              className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+              className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
             >
-              <Package className="w-3 h-3 text-teal-600" />
+              <Package className="w-3.5 h-3.5 text-teal-600" />
               <span>مسحوبات كل عميل</span>
             </button>
           )}
 
           <button
             onClick={onOpenExpensesView}
-            className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+            className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
           >
-            <DollarSign className="w-3 h-3 text-rose-600" />
+            <DollarSign className="w-3.5 h-3.5 text-rose-600" />
             <span>المصروفات والرواتب</span>
           </button>
 
           <button
             onClick={onOpenCustomersView}
-            className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+            className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
           >
-            <Users className="w-3 h-3 text-emerald-600" />
-            <span>كشف حسابات التجار</span>
+            <Users className="w-3.5 h-3.5 text-emerald-600" />
+            <span>كشف حساب التجار</span>
           </button>
         </div>
       </div>
