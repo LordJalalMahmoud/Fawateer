@@ -299,4 +299,61 @@ export interface SalaryPaymentRecord {
   updatedAt: string;
 }
 
+// ----------------------------------------------------
+// 📝 حركات الموظفين: السلف والخصومات والمكافآت خلال الشهر
+// (Employee Advances, Deductions & Bonuses logged at any time)
+// ----------------------------------------------------
+export type EmployeeTransactionType = 'ADVANCE' | 'DEDUCTION' | 'BONUS';
+
+export interface EmployeeTransaction {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  type: EmployeeTransactionType; // 'ADVANCE': سلفة نقدية | 'DEDUCTION': خصم وجزاء | 'BONUS': مكافأة وحافز
+  amount: number;
+  date: string; // YYYY-MM-DD تاريخ وقوع الحركة الفعلي خلال الشهر (أي يوم)
+  salaryMonth: string; // YYYY-MM شهر استحقاق الراتب المراد تطبيق الحركة عليه (مثال: 2026-03)
+  paymentMethod?: PaymentMethod; // طريقة صرف النقدية (للسلف والمكافآت: كاش الخزينة، فودافون، إنستاباي، إلخ)
+  title: string; // سبب أو بيان الحركة (مثال: سلفة نقدية عاجلة، جزاء تأخير، مكافأة تميز)
+  notes?: string;
+  expenseId?: string; // معرف المصروف المرتبط بالخزينة إذا تم تسجيل السلفة كمصروف خروج نقدية
+  settled?: boolean; // هل تم تسوية وخصم الحركة في مسير الراتب
+  salaryPaymentId?: string; // معرف إيصال صرف الراتب عند الاعتماد
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const TRANSACTION_TYPE_CONFIG: Record<
+  EmployeeTransactionType,
+  { label: string; actionLabel: string; color: string; bg: string; border: string; sign: string; impact: 'DEDUCT' | 'ADD' }
+> = {
+  ADVANCE: {
+    label: 'سلفة نقدية',
+    actionLabel: 'تسجيل سلفة موظف',
+    color: 'text-rose-700',
+    bg: 'bg-rose-50',
+    border: 'border-rose-200',
+    sign: '-',
+    impact: 'DEDUCT',
+  },
+  DEDUCTION: {
+    label: 'خصم / جزاء',
+    actionLabel: 'تسجيل خصم أو جزاء',
+    color: 'text-red-700',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    sign: '-',
+    impact: 'DEDUCT',
+  },
+  BONUS: {
+    label: 'مكافأة / حافز',
+    actionLabel: 'إضافة مكافأة أو حافز',
+    color: 'text-emerald-700',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    sign: '+',
+    impact: 'ADD',
+  },
+};
+
 

@@ -1,4 +1,4 @@
-import { Invoice, ProductCatalogItem, CustomerBalance, ProductPricingTier, VaultSettings, CourierSettlement, ExpenseItem, Employee, SalaryPaymentRecord } from './types';
+import { Invoice, ProductCatalogItem, CustomerBalance, ProductPricingTier, VaultSettings, CourierSettlement, ExpenseItem, Employee, SalaryPaymentRecord, EmployeeTransaction } from './types';
 import { INITIAL_INVOICES, INITIAL_PRODUCTS } from './sample-data';
 import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
@@ -10,11 +10,37 @@ const COURIER_SETTLEMENTS_STORAGE_KEY = 'detergent_courier_settlements_v1';
 const EXPENSES_STORAGE_KEY = 'detergent_expenses_v1';
 const EMPLOYEES_STORAGE_KEY = 'detergent_employees_v1';
 const SALARY_PAYMENTS_STORAGE_KEY = 'detergent_salary_payments_v1';
+const EMPLOYEE_TRANSACTIONS_STORAGE_KEY = 'detergent_employee_transactions_v1';
 
 export const INITIAL_COURIER_SETTLEMENTS: CourierSettlement[] = [];
 export const INITIAL_EXPENSES: ExpenseItem[] = [];
 export const INITIAL_EMPLOYEES: Employee[] = [];
 export const INITIAL_SALARY_PAYMENTS: SalaryPaymentRecord[] = [];
+export const INITIAL_EMPLOYEE_TRANSACTIONS: EmployeeTransaction[] = [];
+
+export function getStoredEmployeeTransactions(): EmployeeTransaction[] {
+  if (typeof window === 'undefined') return INITIAL_EMPLOYEE_TRANSACTIONS;
+  try {
+    const raw = localStorage.getItem(EMPLOYEE_TRANSACTIONS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(EMPLOYEE_TRANSACTIONS_STORAGE_KEY, JSON.stringify(INITIAL_EMPLOYEE_TRANSACTIONS));
+      return INITIAL_EMPLOYEE_TRANSACTIONS;
+    }
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error reading employee transactions from localStorage', e);
+    return INITIAL_EMPLOYEE_TRANSACTIONS;
+  }
+}
+
+export function saveStoredEmployeeTransactions(transactions: EmployeeTransaction[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(EMPLOYEE_TRANSACTIONS_STORAGE_KEY, JSON.stringify(transactions));
+  } catch (e) {
+    console.error('Error saving employee transactions to localStorage', e);
+  }
+}
 
 export function getStoredExpenses(): ExpenseItem[] {
   if (typeof window === 'undefined') return INITIAL_EXPENSES;

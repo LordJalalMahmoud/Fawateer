@@ -52,7 +52,17 @@ import {
   UserX
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ExpenseItem, Employee, SalaryPaymentRecord, ExpenseCategory, PaymentMethod, Invoice } from '@/lib/types';
+import { 
+  ExpenseItem, 
+  Employee, 
+  SalaryPaymentRecord, 
+  ExpenseCategory, 
+  PaymentMethod, 
+  Invoice,
+  EmployeeTransaction,
+  EmployeeTransactionType,
+  TRANSACTION_TYPE_CONFIG
+} from '@/lib/types';
 import { getMonthlyCommissionsOverview, getEmployeeCommissionStats } from '@/lib/commission-analytics';
 import { MonthPicker } from '@/components/MonthPicker';
 
@@ -149,6 +159,7 @@ export interface ExpensesPayrollViewProps {
   expenses: ExpenseItem[];
   employees: Employee[];
   salaryPayments: SalaryPaymentRecord[];
+  employeeTransactions?: EmployeeTransaction[];
   invoices?: Invoice[];
   onSaveExpense: (expense: ExpenseItem) => Promise<void>;
   onDeleteExpense: (expenseId: string) => Promise<void>;
@@ -156,8 +167,10 @@ export interface ExpensesPayrollViewProps {
   onDeleteEmployee: (employeeId: string) => Promise<void>;
   onSaveSalaryPayment: (payment: SalaryPaymentRecord, autoCreateExpense?: boolean) => Promise<void>;
   onDeleteSalaryPayment: (paymentId: string) => Promise<void>;
+  onSaveEmployeeTransaction?: (transaction: EmployeeTransaction, autoCreateExpense?: boolean) => Promise<void>;
+  onDeleteEmployeeTransaction?: (transactionId: string) => Promise<void>;
   currentUserEmail?: string | null;
-  initialTab?: 'EXPENSES' | 'PAYROLL' | 'PARTNER_SHEET' | 'EMPLOYEES' | 'ANALYTICS';
+  initialTab?: 'EXPENSES' | 'PAYROLL' | 'MOVEMENTS' | 'PARTNER_SHEET' | 'EMPLOYEES' | 'ANALYTICS';
   isModal?: boolean;
   onClose?: () => void;
 }
@@ -166,6 +179,7 @@ export function ExpensesPayrollView({
   expenses = [],
   employees = [],
   salaryPayments = [],
+  employeeTransactions = [],
   invoices = [],
   onSaveExpense,
   onDeleteExpense,
@@ -173,6 +187,8 @@ export function ExpensesPayrollView({
   onDeleteEmployee,
   onSaveSalaryPayment,
   onDeleteSalaryPayment,
+  onSaveEmployeeTransaction,
+  onDeleteEmployeeTransaction,
   currentUserEmail,
   initialTab = 'EXPENSES',
   isModal = false,
@@ -181,7 +197,7 @@ export function ExpensesPayrollView({
   const printRef = useRef<HTMLDivElement>(null);
 
   // Main navigation tabs (Req.txt #6: المصروفات | الرواتب | حركات الرواتب / مسحوبات الشركاء)
-  const [activeTab, setActiveTab] = useState<'EXPENSES' | 'PAYROLL' | 'PARTNER_SHEET' | 'EMPLOYEES' | 'ANALYTICS'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'EXPENSES' | 'PAYROLL' | 'MOVEMENTS' | 'PARTNER_SHEET' | 'EMPLOYEES' | 'ANALYTICS'>(initialTab);
 
   React.useEffect(() => {
     if (initialTab) {
@@ -223,6 +239,27 @@ export function ExpensesPayrollView({
 
   // Selected Month for Payroll view (YYYY-MM)
   const [selectedPayrollMonth, setSelectedPayrollMonth] = useState<string>(currentMonthStr);
+
+  // Filters & State for Employee Transactions (السلف والخصومات والمكافآت خلال الشهر)
+  const [selectedMovementMonth, setSelectedMovementMonth] = useState<string>(currentMonthStr);
+  const [isAllMonthsMovementMode, setIsAllMonthsMovementMode] = useState<boolean>(false);
+  const [movementTypeFilter, setMovementTypeFilter] = useState<'ALL' | EmployeeTransactionType>('ALL');
+  const [movementEmployeeFilter, setMovementEmployeeFilter] = useState<string>('ALL');
+  const [movementSearchQuery, setMovementSearchQuery] = useState('');
+
+  // Transaction Form Modal State
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<EmployeeTransaction | null>(null);
+  const [txType, setTxType] = useState<EmployeeTransactionType>('ADVANCE');
+  const [txEmployeeId, setTxEmployeeId] = useState<string>('');
+  const [txAmount, setTxAmount] = useState<number | ''>('');
+  const [txDate, setTxDate] = useState(new Date().toISOString().slice(0, 10));
+  const [txSalaryMonth, setTxSalaryMonth] = useState(currentMonthStr);
+  const [txPaymentMethod, setTxPaymentMethod] = useState<PaymentMethod>('CASH');
+  const [txTitle, setTxTitle] = useState('');
+  const [txNotes, setTxNotes] = useState('');
+  const [txAutoCreateExpense, setTxAutoCreateExpense] = useState(true);
+  const [isSubmittingTx, setIsSubmittingTx] = useState(false);
 
   // Dialogs State
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
@@ -409,6 +446,59 @@ export function ExpensesPayrollView({
     return getMonthlyCommissionsOverview(invoices, employees, selectedPayrollMonth).byEmployee;
   }, [invoices, employees, selectedPayrollMonth]);
 
+  // Filtered Employee Transactions (Advances, Deductions, Bonuses)
+  const filteredEmployeeTransactions = useMemo(() => {
+    return (employeeTransactions || []).filter(item => {
+      if (!isAllMonthsMovementMode) {
+        if (item.salaryMonth !== selectedMovementMonth && !item.date.startsWith(selectedMovementMonth)) return false;
+      }
+      if (movementTypeFilter !== 'ALL' && item.type !== movementTypeFilter) return false;
+      if (movementEmployeeFilter !== 'ALL' && item.employeeId !== movementEmployeeFilter) return false;
+
+      if (movementSearchQuery.trim()) {
+        const q = movementSearchQuery.trim().toLowerCase();
+        const matchEmp = (item.employeeName || '').toLowerCase().includes(q);
+        const matchTitle = (item.title || '').toLowerCase().includes(q);
+        const matchNotes = (item.notes || '').toLowerCase().includes(q);
+        if (!matchEmp && !matchTitle && !matchNotes) return false;
+      }
+      return true;
+    });
+  }, [employeeTransactions, isAllMonthsMovementMode, selectedMovementMonth, movementTypeFilter, movementEmployeeFilter, movementSearchQuery]);
+
+  const movementSummary = useMemo(() => {
+    let totalAdvances = 0;
+    let totalDeductions = 0;
+    let totalBonuses = 0;
+    let advancesCount = 0;
+    let deductionsCount = 0;
+    let bonusesCount = 0;
+
+    filteredEmployeeTransactions.forEach(t => {
+      if (t.type === 'ADVANCE') {
+        totalAdvances += Number(t.amount || 0);
+        advancesCount++;
+      } else if (t.type === 'DEDUCTION') {
+        totalDeductions += Number(t.amount || 0);
+        deductionsCount++;
+      } else if (t.type === 'BONUS') {
+        totalBonuses += Number(t.amount || 0);
+        bonusesCount++;
+      }
+    });
+
+    return {
+      totalAdvances,
+      totalDeductions,
+      totalBonuses,
+      advancesCount,
+      deductionsCount,
+      bonusesCount,
+      totalCount: filteredEmployeeTransactions.length,
+      netDeductions: (totalAdvances + totalDeductions) - totalBonuses,
+    };
+  }, [filteredEmployeeTransactions]);
+
   // Payroll data for selected month
   const monthPayrollData = useMemo(() => {
     return employees.map(emp => {
@@ -430,12 +520,34 @@ export function ExpensesPayrollView({
         ? Number(existingPayment.commissionInvoicesCount)
         : calculatedInvoicesCount;
 
-      const deductions = existingPayment ? (existingPayment.deductions || 0) : 0;
-      const advances = existingPayment ? (existingPayment.advances || 0) : 0;
+      // Automatically calculate advances, deductions, and bonuses logged for this employee for this month
+      const empTransactions = (employeeTransactions || []).filter(
+        t => t.employeeId === emp.id && (t.salaryMonth === selectedPayrollMonth || t.date.startsWith(selectedPayrollMonth))
+      );
+
+      const autoAdvances = empTransactions
+        .filter(t => t.type === 'ADVANCE')
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const autoDeductions = empTransactions
+        .filter(t => t.type === 'DEDUCTION')
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const autoBonuses = empTransactions
+        .filter(t => t.type === 'BONUS')
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+      const bonuses = existingPayment?.bonuses !== undefined 
+        ? Number(existingPayment.bonuses) 
+        : autoBonuses;
+      const deductions = existingPayment?.deductions !== undefined 
+        ? Number(existingPayment.deductions) 
+        : autoDeductions;
+      const advances = existingPayment?.advances !== undefined 
+        ? Number(existingPayment.advances) 
+        : autoAdvances;
 
       const netCalculated = existingPayment
         ? existingPayment.netPaid
-        : Math.max(0, baseSalary + allowances + commissions - deductions - advances);
+        : Math.max(0, baseSalary + allowances + commissions + bonuses - deductions - advances);
 
       return {
         employee: emp,
@@ -445,13 +557,18 @@ export function ExpensesPayrollView({
         allowances,
         commissions,
         commissionInvoicesCount,
+        bonuses,
         deductions,
         advances,
         netPaid: netCalculated,
         status: isPaid ? 'PAID' : 'UNPAID',
+        transactions: empTransactions,
+        advancesCount: empTransactions.filter(t => t.type === 'ADVANCE').length,
+        deductionsCount: empTransactions.filter(t => t.type === 'DEDUCTION').length,
+        bonusesCount: empTransactions.filter(t => t.type === 'BONUS').length,
       };
     });
-  }, [employees, salaryPayments, selectedPayrollMonth, monthlyCommissionsMap]);
+  }, [employees, salaryPayments, selectedPayrollMonth, monthlyCommissionsMap, employeeTransactions]);
 
   const displayedPayrollData = useMemo(() => {
     if (showResignedInPayroll) return monthPayrollData;
@@ -462,13 +579,20 @@ export function ExpensesPayrollView({
     let totalObligation = 0;
     let totalPaid = 0;
     let totalCommissions = 0;
+    let totalAdvances = 0;
+    let totalDeductions = 0;
+    let totalBonuses = 0;
     let paidCount = 0;
     let unpaidCount = 0;
 
     monthPayrollData.forEach(item => {
       if (item.employee.status !== 'RESIGNED') {
-        totalObligation += item.baseSalary + item.allowances + item.commissions;
+        const empObligation = item.baseSalary + item.allowances + item.commissions + item.bonuses - item.deductions - item.advances;
+        totalObligation += Math.max(0, empObligation);
         totalCommissions += item.commissions;
+        totalAdvances += item.advances;
+        totalDeductions += item.deductions;
+        totalBonuses += item.bonuses;
         if (!item.isPaid) unpaidCount++;
       }
       if (item.isPaid && item.payment) {
@@ -481,6 +605,9 @@ export function ExpensesPayrollView({
       totalObligation,
       totalPaid,
       totalCommissions,
+      totalAdvances,
+      totalDeductions,
+      totalBonuses,
       remainingUnpaid: Math.max(0, totalObligation - totalPaid),
       paidCount,
       unpaidCount,
@@ -568,13 +695,22 @@ export function ExpensesPayrollView({
 
     setSalBaseSalary(existing ? existing.baseSalary : Number(emp.baseSalary || 0));
     setSalAllowances(existing ? existing.allowances : Number(emp.fixedAllowances || 0));
-    setSalBonuses(existing ? existing.bonuses : 0);
 
     const stats = getEmployeeCommissionStats(invoices, emp.id, initialMonth);
     setSalCommissions(existing?.commissions !== undefined ? existing.commissions : stats.totalCommissions);
     setSalCommissionInvoicesCount(existing?.commissionInvoicesCount !== undefined ? existing.commissionInvoicesCount : stats.invoicesCount);
-    setSalDeductions(existing ? (existing.deductions || 0) : 0);
-    setSalAdvances(existing?.advances !== undefined ? (existing.advances || 0) : 0);
+
+    // Load advances, deductions, bonuses from logged transactions
+    const empTx = (employeeTransactions || []).filter(
+      t => t.employeeId === emp.id && (t.salaryMonth === initialMonth || t.date.startsWith(initialMonth))
+    );
+    const autoAdvances = empTx.filter(t => t.type === 'ADVANCE').reduce((s, t) => s + Number(t.amount || 0), 0);
+    const autoDeductions = empTx.filter(t => t.type === 'DEDUCTION').reduce((s, t) => s + Number(t.amount || 0), 0);
+    const autoBonuses = empTx.filter(t => t.type === 'BONUS').reduce((s, t) => s + Number(t.amount || 0), 0);
+
+    setSalBonuses(existing?.bonuses !== undefined ? existing.bonuses : autoBonuses);
+    setSalDeductions(existing?.deductions !== undefined ? existing.deductions : autoDeductions);
+    setSalAdvances(existing?.advances !== undefined ? existing.advances : autoAdvances);
     setSalPaymentMethod(existing ? existing.paymentMethod : 'CASH');
     setSalNotes(existing?.notes || '');
     setIsSalaryDisburseModalOpen(true);
@@ -582,11 +718,86 @@ export function ExpensesPayrollView({
 
   const handleSalaryMonthChange = (newMonth: string) => {
     setSalMonth(newMonth);
-    // Auto refresh commissions if disbursing a new payment for a different month
+    // Auto refresh commissions, advances, deductions if disbursing a new payment for a different month
     if (!editingSalaryPayment && disbursingEmployee) {
       const stats = getEmployeeCommissionStats(invoices, disbursingEmployee.id, newMonth);
       setSalCommissions(stats.totalCommissions);
       setSalCommissionInvoicesCount(stats.invoicesCount);
+
+      const empTx = (employeeTransactions || []).filter(
+        t => t.employeeId === disbursingEmployee.id && (t.salaryMonth === newMonth || t.date.startsWith(newMonth))
+      );
+      setSalBonuses(empTx.filter(t => t.type === 'BONUS').reduce((s, t) => s + Number(t.amount || 0), 0));
+      setSalDeductions(empTx.filter(t => t.type === 'DEDUCTION').reduce((s, t) => s + Number(t.amount || 0), 0));
+      setSalAdvances(empTx.filter(t => t.type === 'ADVANCE').reduce((s, t) => s + Number(t.amount || 0), 0));
+    }
+  };
+
+  // Handlers: Employee Transactions (Advances, Deductions, Bonuses)
+  const handleOpenNewTransaction = (presetType?: EmployeeTransactionType, presetEmployeeId?: string) => {
+    setEditingTx(null);
+    const type = presetType || 'ADVANCE';
+    setTxType(type);
+    setTxEmployeeId(presetEmployeeId || (employees[0]?.id || ''));
+    setTxAmount('');
+    setTxDate(new Date().toISOString().slice(0, 10));
+    setTxSalaryMonth(selectedPayrollMonth || currentMonthStr);
+    setTxPaymentMethod('CASH');
+    setTxTitle(type === 'ADVANCE' ? 'سلفة نقدية' : type === 'DEDUCTION' ? 'خصم / جزاء' : 'مكافأة وحافز');
+    setTxNotes('');
+    setTxAutoCreateExpense(type === 'ADVANCE');
+    setIsTxModalOpen(true);
+  };
+
+  const handleOpenEditTransaction = (tx: EmployeeTransaction) => {
+    setEditingTx(tx);
+    setTxType(tx.type);
+    setTxEmployeeId(tx.employeeId);
+    setTxAmount(tx.amount);
+    setTxDate(tx.date);
+    setTxSalaryMonth(tx.salaryMonth);
+    setTxPaymentMethod(tx.paymentMethod || 'CASH');
+    setTxTitle(tx.title);
+    setTxNotes(tx.notes || '');
+    setTxAutoCreateExpense(Boolean(tx.expenseId));
+    setIsTxModalOpen(true);
+  };
+
+  const handleSaveTransactionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!txEmployeeId || Number(txAmount) <= 0 || !txTitle.trim()) return;
+
+    const emp = employees.find(e => e.id === txEmployeeId);
+    if (!emp) return;
+
+    setIsSubmittingTx(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const txToSave: EmployeeTransaction = {
+        id: editingTx?.id || `tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        type: txType,
+        amount: Number(txAmount),
+        date: txDate,
+        salaryMonth: txSalaryMonth,
+        paymentMethod: txType === 'ADVANCE' ? txPaymentMethod : undefined,
+        title: txTitle.trim(),
+        notes: txNotes.trim() || undefined,
+        expenseId: editingTx?.expenseId,
+        settled: editingTx?.settled || false,
+        createdAt: editingTx?.createdAt || nowIso,
+        updatedAt: nowIso,
+      };
+
+      if (onSaveEmployeeTransaction) {
+        await onSaveEmployeeTransaction(txToSave, txType === 'ADVANCE' && txAutoCreateExpense);
+      }
+      setIsTxModalOpen(false);
+      setEditingTx(null);
+      confetti({ particleCount: 30, spread: 50 });
+    } finally {
+      setIsSubmittingTx(false);
     }
   };
 
@@ -713,8 +924,28 @@ export function ExpensesPayrollView({
 
           <button
             type="button"
+            onClick={() => handleOpenNewTransaction('ADVANCE')}
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+            title="تسجيل سلفة نقدية لأي موظف في أي وقت من الشهر"
+          >
+            <HandCoins className="w-4 h-4 text-rose-600" />
+            <span>+ سلفة موظف</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleOpenNewTransaction('DEDUCTION')}
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+            title="تسجيل خصم أو جزاء على موظف"
+          >
+            <TrendingDown className="w-4 h-4 text-red-600" />
+            <span>+ خصم / جزاء</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleOpenNewExpense()}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
             <span>+ تسجيل مصروف</span>
@@ -766,19 +997,19 @@ export function ExpensesPayrollView({
           </div>
         </div>
 
-        {/* Top Office Consumption */}
+        {/* Active Movements (Advances & Deductions) */}
         <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="font-semibold">أعلى مكتب استهلاكاً</span>
+            <span className="font-semibold">سلف وخصومات ({formatArabicMonth(selectedPayrollMonth)})</span>
             <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
-              <Building2 className="w-3.5 h-3.5" />
+              <HandCoins className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-sm sm:text-base font-bold text-amber-800 mt-1 truncate">
-            {officeMonthlyBreakdown[0] ? officeMonthlyBreakdown[0].office : '—'}
+          <div className="text-lg sm:text-xl font-bold font-mono text-amber-800 mt-1">
+            {formatEGP(monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions)}
           </div>
-          <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-            {officeMonthlyBreakdown[0] ? `${formatEGP(officeMonthlyBreakdown[0].total)} (${officeMonthlyBreakdown[0].percentage}%)` : 'لا توجد حركات'}
+          <div className="text-[11px] text-slate-400 mt-0.5">
+            سلف: {formatEGP(monthPayrollSummary.totalAdvances)} • خصومات: {formatEGP(monthPayrollSummary.totalDeductions)}
           </div>
         </div>
 
@@ -828,6 +1059,24 @@ export function ExpensesPayrollView({
           >
             <Calendar className="w-4 h-4 text-purple-400" />
             <span>مسير الرواتب الشهري</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('MOVEMENTS')}
+            className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === 'MOVEMENTS'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <HandCoins className="w-4 h-4 text-rose-400" />
+            <span>السلف والخصومات (حركات الموظفين)</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+              activeTab === 'MOVEMENTS' ? 'bg-slate-700 text-slate-100' : 'bg-rose-100 text-rose-800'
+            }`}>
+              {filteredEmployeeTransactions.length}
+            </span>
           </button>
 
           <button
@@ -1095,7 +1344,9 @@ export function ExpensesPayrollView({
                     <th className="py-3 px-4">الراتب الأساسي</th>
                     <th className="py-3 px-4">البدلات</th>
                     <th className="py-3 px-4">العمولات</th>
-                    <th className="py-3 px-4">الخصومات والسلف</th>
+                    <th className="py-3 px-4">المكافآت (+)</th>
+                    <th className="py-3 px-4">الخصومات (-)</th>
+                    <th className="py-3 px-4">السلف (-)</th>
                     <th className="py-3 px-4">الصافي المستحق</th>
                     <th className="py-3 px-4 text-center">حالة الصرف</th>
                     <th className="py-3 px-4">تاريخ الصرف الفعلي</th>
@@ -1131,9 +1382,27 @@ export function ExpensesPayrollView({
                           ) : '—'}
                         </td>
 
+                        <td className="py-3 px-4 font-mono text-emerald-700">
+                          {item.bonuses > 0 ? (
+                            <span className="inline-flex items-center gap-1 font-semibold" title={`مكافآت وحوافز: ${item.bonusesCount || 0} حركة`}>
+                              +{formatEGP(item.bonuses)}
+                            </span>
+                          ) : '—'}
+                        </td>
+
+                        <td className="py-3 px-4 font-mono text-red-700">
+                          {item.deductions > 0 ? (
+                            <span className="inline-flex items-center gap-1 font-semibold" title={`خصومات وجزاءات: ${item.deductionsCount || 0} جزاء`}>
+                              -{formatEGP(item.deductions)}
+                            </span>
+                          ) : '—'}
+                        </td>
+
                         <td className="py-3 px-4 font-mono text-rose-700">
-                          {(item.deductions + item.advances) > 0 ? (
-                            <span>-{formatEGP(item.deductions + item.advances)}</span>
+                          {item.advances > 0 ? (
+                            <span className="inline-flex items-center gap-1 font-semibold" title={`سلف نقدية مسحوبة: ${item.advancesCount || 0} سلفة`}>
+                              -{formatEGP(item.advances)}
+                            </span>
                           ) : '—'}
                         </td>
 
@@ -1161,17 +1430,27 @@ export function ExpensesPayrollView({
                         </td>
 
                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDisburseSalary(item.employee, item.payment)}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                              hasPaid
-                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                                : 'bg-purple-600 hover:bg-purple-700 text-white shadow-xs'
-                            }`}
-                          >
-                            {hasPaid ? 'تعديل السجل' : 'صرف الراتب'}
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDisburseSalary(item.employee, item.payment)}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                                hasPaid
+                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                  : 'bg-purple-600 hover:bg-purple-700 text-white shadow-xs'
+                              }`}
+                            >
+                              {hasPaid ? 'تعديل السجل' : 'صرف الراتب'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenNewTransaction('ADVANCE', item.employee.id)}
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                              title="تسجيل سلفة نقدية لهذا الموظف"
+                            >
+                              <HandCoins className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
 
                       </tr>
@@ -1182,8 +1461,11 @@ export function ExpensesPayrollView({
             </div>
 
             <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600 gap-2 font-mono">
-              <div>
-                إجمالي التزامات رواتب الشهر: <strong>{formatEGP(monthPayrollSummary.totalObligation)}</strong>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span>إجمالي الالتزامات: <strong>{formatEGP(monthPayrollSummary.totalObligation)}</strong></span>
+                {monthPayrollSummary.totalAdvances > 0 && <span>• سلف: <strong className="text-rose-700">{formatEGP(monthPayrollSummary.totalAdvances)}</strong></span>}
+                {monthPayrollSummary.totalDeductions > 0 && <span>• خصومات: <strong className="text-red-700">{formatEGP(monthPayrollSummary.totalDeductions)}</strong></span>}
+                {monthPayrollSummary.totalBonuses > 0 && <span>• مكافآت: <strong className="text-emerald-700">{formatEGP(monthPayrollSummary.totalBonuses)}</strong></span>}
               </div>
               <div className="flex items-center gap-3">
                 <span>تم صرف: <strong className="text-emerald-700">{formatEGP(monthPayrollSummary.totalPaid)}</strong></span>
@@ -1191,6 +1473,299 @@ export function ExpensesPayrollView({
               </div>
             </div>
 
+          </div>
+
+        </div>
+      )}
+
+      {/* 5.5 Tab: MOVEMENTS DATA TABLE (سجل السلف والخصومات والمكافآت خلال الشهر) */}
+      {activeTab === 'MOVEMENTS' && (
+        <div className="space-y-4">
+          
+          {/* Movements Toolbar */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="ابحث باسم الموظف، سبب السلفة أو الخصم، الملاحظات..."
+                value={movementSearchQuery}
+                onChange={(e) => setMovementSearchQuery(e.target.value)}
+                className="w-full pl-3 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-rose-500/20 placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Month Selector */}
+              <MonthPicker
+                value={selectedMovementMonth}
+                onChange={(m) => {
+                  setSelectedMovementMonth(m);
+                  setIsAllMonthsMovementMode(false);
+                }}
+                variant="default"
+                size="sm"
+              />
+
+              <button
+                type="button"
+                onClick={() => setIsAllMonthsMovementMode(!isAllMonthsMovementMode)}
+                className={`px-2.5 py-1.5 text-xs font-semibold rounded-xl border transition-colors cursor-pointer ${
+                  isAllMonthsMovementMode
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {isAllMonthsMovementMode ? 'عرض شهر محدد' : 'عرض كافة الشهور'}
+              </button>
+
+              {/* Movement Type Filter */}
+              <select
+                value={movementTypeFilter}
+                onChange={(e) => setMovementTypeFilter(e.target.value as any)}
+                className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 cursor-pointer focus:outline-hidden"
+              >
+                <option value="ALL">كافة الحركات (سلف، خصومات، مكافآت)</option>
+                <option value="ADVANCE">السلف النقدية فقط</option>
+                <option value="DEDUCTION">الخصومات والجزاءات فقط</option>
+                <option value="BONUS">المكافآت والحوافز فقط</option>
+              </select>
+
+              {/* Employee Filter */}
+              <select
+                value={movementEmployeeFilter}
+                onChange={(e) => setMovementEmployeeFilter(e.target.value)}
+                className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700 cursor-pointer focus:outline-hidden"
+              >
+                <option value="ALL">جميع الموظفين والعمال ({employees.length})</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
+              </select>
+
+              {/* Action Buttons */}
+              <button
+                type="button"
+                onClick={() => handleOpenNewTransaction('ADVANCE')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <HandCoins className="w-3.5 h-3.5" />
+                <span>+ سلفة جديدة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenNewTransaction('DEDUCTION')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <TrendingDown className="w-3.5 h-3.5" />
+                <span>+ تسجيل خصم</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenNewTransaction('BONUS')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <Award className="w-3.5 h-3.5 text-emerald-700" />
+                <span>+ مكافأة</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Movements Summary KPI Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+              <div className="text-[11px] text-slate-500 font-semibold flex items-center justify-between">
+                <span>إجمالي السلف النقدية</span>
+                <HandCoins className="w-3.5 h-3.5 text-rose-500" />
+              </div>
+              <div className="text-base font-bold font-mono text-rose-700 mt-1">
+                {formatEGP(movementSummary.totalAdvances)}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{movementSummary.advancesCount} سلفة مسجلة</div>
+            </div>
+
+            <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+              <div className="text-[11px] text-slate-500 font-semibold flex items-center justify-between">
+                <span>الخصومات والجزاءات</span>
+                <TrendingDown className="w-3.5 h-3.5 text-red-500" />
+              </div>
+              <div className="text-base font-bold font-mono text-red-700 mt-1">
+                {formatEGP(movementSummary.totalDeductions)}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{movementSummary.deductionsCount} جزاء مسجل</div>
+            </div>
+
+            <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+              <div className="text-[11px] text-slate-500 font-semibold flex items-center justify-between">
+                <span>المكافآت والحوافز</span>
+                <Award className="w-3.5 h-3.5 text-emerald-500" />
+              </div>
+              <div className="text-base font-bold font-mono text-emerald-700 mt-1">
+                {formatEGP(movementSummary.totalBonuses)}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{movementSummary.bonusesCount} مكافأة مسجلة</div>
+            </div>
+
+            <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+              <div className="text-[11px] text-slate-500 font-semibold flex items-center justify-between">
+                <span>صافي الخصم من الرواتب</span>
+                <Scale className="w-3.5 h-3.5 text-slate-500" />
+              </div>
+              <div className="text-base font-bold font-mono text-slate-900 mt-1">
+                {formatEGP(movementSummary.netDeductions)}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">سلف + خصومات - مكافآت</div>
+            </div>
+          </div>
+
+          {/* Movements Data Table */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+            {filteredEmployeeTransactions.length === 0 ? (
+              <div className="py-14 text-center space-y-2">
+                <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-1">
+                  <HandCoins className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">لا توجد حركات مسجلة تطابق الفلترة</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  يمكنك تسجيل سلفة نقدية أو خصم أو مكافأة لأي موظف في أي وقت من الشهر بضغطة واحدة.
+                </p>
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenNewTransaction('ADVANCE')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl cursor-pointer"
+                  >
+                    <HandCoins className="w-4 h-4" />
+                    <span>+ تسجيل سلفة الآن</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenNewTransaction('DEDUCTION')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                  >
+                    <TrendingDown className="w-4 h-4 text-red-600" />
+                    <span>+ تسجيل خصم أو جزاء</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4">تاريخ الحركة</th>
+                      <th className="py-3 px-4">الموظف / العامل</th>
+                      <th className="py-3 px-4">نوع الحركة</th>
+                      <th className="py-3 px-4">السبب / البيان</th>
+                      <th className="py-3 px-4">شهر الراتب المستحق</th>
+                      <th className="py-3 px-4">طريقة الصرف</th>
+                      <th className="py-3 px-4">المبلغ</th>
+                      <th className="py-3 px-4 text-center">أثر الحركة على الراتب</th>
+                      <th className="py-3 px-4 text-center">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredEmployeeTransactions.map((tx) => {
+                      const cfg = TRANSACTION_TYPE_CONFIG[tx.type] || TRANSACTION_TYPE_CONFIG.ADVANCE;
+                      const emp = employees.find(e => e.id === tx.employeeId);
+                      const isSettled = tx.settled || Boolean(
+                        salaryPayments.find(p => p.employeeId === tx.employeeId && (p.salaryMonth || p.month) === tx.salaryMonth && p.status === 'PAID')
+                      );
+
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 px-4 whitespace-nowrap font-mono text-slate-600">
+                            {tx.date}
+                          </td>
+                          <td className="py-2.5 px-4 font-bold text-slate-900 whitespace-nowrap">
+                            <div>{tx.employeeName}</div>
+                            {emp && <span className="text-[10px] text-slate-400 font-normal">{emp.jobTitle}</span>}
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
+                              <span>{cfg.label}</span>
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 text-slate-800 max-w-xs truncate" title={tx.title}>
+                            <div>{tx.title}</div>
+                            {tx.notes && <span className="text-[10px] text-slate-400 block truncate">{tx.notes}</span>}
+                          </td>
+                          <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 text-[11px] font-semibold">
+                              {formatArabicMonth(tx.salaryMonth) || tx.salaryMonth}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap text-slate-600">
+                            {tx.paymentMethod ? (
+                              PAYMENT_METHOD_LABELS[tx.paymentMethod]?.label || tx.paymentMethod
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap font-mono font-bold text-xs sm:text-sm">
+                            <span className={cfg.color}>
+                              {cfg.sign}{formatEGP(tx.amount)}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                            {isSettled ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>تمت التسوية بالراتب</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <Clock className="w-3 h-3" />
+                                <span>معلق (بانتظار مسير الشهر)</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditTransaction(tx)}
+                                className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                                title="تعديل الحركة"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`هل أنت متأكد من حذف حركة (${cfg.label} - ${tx.employeeName}) بقيمة ${tx.amount} ج.م؟`)) {
+                                    if (onDeleteEmployeeTransaction) {
+                                      onDeleteEmployeeTransaction(tx.id);
+                                    }
+                                  }
+                                }}
+                                className="p-1 text-rose-500 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                title="حذف"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600 gap-2 font-mono">
+              <div>
+                عدد الحركات: <strong>{filteredEmployeeTransactions.length}</strong> حركة
+              </div>
+              <div className="flex items-center gap-3">
+                <span>إجمالي السلف: <strong className="text-rose-700">{formatEGP(movementSummary.totalAdvances)}</strong></span>
+                <span>• الخصومات: <strong className="text-red-700">{formatEGP(movementSummary.totalDeductions)}</strong></span>
+                <span>• المكافآت: <strong className="text-emerald-700">{formatEGP(movementSummary.totalBonuses)}</strong></span>
+              </div>
+            </div>
           </div>
 
         </div>
@@ -1626,6 +2201,53 @@ export function ExpensesPayrollView({
                 </div>
               </div>
 
+              {/* Employee Logged Transactions Preview during this month */}
+              {(() => {
+                const empTx = (employeeTransactions || []).filter(
+                  t => t.employeeId === disbursingEmployee.id && (t.salaryMonth === salMonth || t.date.startsWith(salMonth))
+                );
+                if (empTx.length === 0) {
+                  return (
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 flex items-center justify-between">
+                      <span>لا توجد سلف أو خصومات مسجلة خلال شهر ({formatArabicMonth(salMonth) || salMonth}).</span>
+                      <span className="text-[10px] text-slate-400">يمكن إدخال مبالغ يدوياً أدناه</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                    <div className="font-bold text-slate-700 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <HandCoins className="w-3.5 h-3.5 text-purple-600" />
+                        <span>الحركات المسجلة للموظف لشهر ({formatArabicMonth(salMonth) || salMonth}):</span>
+                      </span>
+                      <span className="text-[10px] text-purple-700 font-semibold bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                        محتسبة تلقائياً ({empTx.length} حركات)
+                      </span>
+                    </div>
+                    <div className="space-y-1 max-h-32 overflow-y-auto divide-y divide-slate-100">
+                      {empTx.map(tx => {
+                        const cfg = TRANSACTION_TYPE_CONFIG[tx.type];
+                        return (
+                          <div key={tx.id} className="pt-1 flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border shrink-0 ${cfg.bg} ${cfg.color} ${cfg.border}`}>
+                                {cfg.label}
+                              </span>
+                              <span className="text-slate-700 font-medium truncate">{tx.title}</span>
+                              <span className="text-slate-400 font-mono text-[10px] shrink-0">({tx.date})</span>
+                            </div>
+                            <span className={`font-mono font-bold shrink-0 mr-2 ${cfg.color}`}>
+                              {cfg.sign}{formatEGP(tx.amount)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Salary Breakdown Numbers */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1650,21 +2272,49 @@ export function ExpensesPayrollView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">العمولات والمكافآت</label>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    عمولات المبيعات
+                    {salCommissionInvoicesCount > 0 && (
+                      <span className="text-[10px] text-indigo-600 font-normal mr-1">
+                        ({salCommissionInvoicesCount} فواتير)
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     value={salCommissions}
                     onChange={e => setSalCommissions(parseFloat(e.target.value) || 0)}
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 font-mono text-indigo-700"
+                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 font-mono text-indigo-700 font-semibold"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">الخصومات والسلف</label>
+                  <label className="block font-semibold text-emerald-800 mb-1">المكافآت والحوافز (+)</label>
+                  <input
+                    type="number"
+                    value={salBonuses}
+                    onChange={e => setSalBonuses(parseFloat(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 border border-emerald-200 rounded-lg bg-emerald-50/30 font-mono text-emerald-700 font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-red-800 mb-1">الخصومات والجزاءات (-)</label>
                   <input
                     type="number"
                     value={salDeductions}
                     onChange={e => setSalDeductions(parseFloat(e.target.value) || 0)}
-                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-slate-50 font-mono text-rose-700"
+                    className="w-full px-2.5 py-1.5 border border-red-200 rounded-lg bg-red-50/30 font-mono text-red-700 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-rose-800 mb-1">السلف المسحوبة (-)</label>
+                  <input
+                    type="number"
+                    value={salAdvances}
+                    onChange={e => setSalAdvances(parseFloat(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 border border-rose-200 rounded-lg bg-rose-50/30 font-mono text-rose-700 font-semibold"
                   />
                 </div>
               </div>
@@ -1944,6 +2594,266 @@ export function ExpensesPayrollView({
                   className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                 >
                   {isSubmittingEmployee ? 'جارِ الحفظ...' : 'حفظ بيانات الموظف'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Form 5: Employee Transaction (Advance / Deduction / Bonus) Modal */}
+      {isTxModalOpen && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden" dir="rtl">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${
+                  txType === 'ADVANCE' ? 'bg-rose-100 text-rose-700' :
+                  txType === 'DEDUCTION' ? 'bg-amber-100 text-amber-700' :
+                  'bg-emerald-100 text-emerald-700'
+                }`}>
+                  {txType === 'ADVANCE' ? '💸' : txType === 'DEDUCTION' ? '⚠️' : '🎁'}
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    {editingTx ? 'تعديل حركة موظف' : (
+                      txType === 'ADVANCE' ? 'تسجيل سلفة موظف جديدة' :
+                      txType === 'DEDUCTION' ? 'تسجيل خصم أو جزاء على موظف' :
+                      'تسجيل مكافأة أو حافز لموظف'
+                    )}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    يمكن تسجيل الحركة في أي يوم من الشهر وتُخصم أو تُضاف تلقائياً في مسير الرواتب
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsTxModalOpen(false); setEditingTx(null); }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTransactionSubmit} className="p-4 space-y-3.5 text-xs">
+              {/* Type Selector (Advance / Deduction / Bonus) */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">نوع الحركة المالية *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTxType('ADVANCE');
+                      if (!editingTx) {
+                        setTxTitle('سلفة نقدية');
+                        setTxAutoCreateExpense(true);
+                      }
+                    }}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      txType === 'ADVANCE'
+                        ? 'border-rose-500 bg-rose-50 text-rose-800 shadow-xs'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>💸</span>
+                    <span>سلفة نقدية</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTxType('DEDUCTION');
+                      if (!editingTx) {
+                        setTxTitle('خصم / جزاء');
+                        setTxAutoCreateExpense(false);
+                      }
+                    }}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      txType === 'DEDUCTION'
+                        ? 'border-amber-500 bg-amber-50 text-amber-800 shadow-xs'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>⚠️</span>
+                    <span>خصم / جزاء</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTxType('BONUS');
+                      if (!editingTx) {
+                        setTxTitle('مكافأة وحافز');
+                        setTxAutoCreateExpense(false);
+                      }
+                    }}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      txType === 'BONUS'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-xs'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>🎁</span>
+                    <span>مكافأة / إضافي</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Employee Selector */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">الموظف المعني *</label>
+                <select
+                  value={txEmployeeId}
+                  onChange={e => setTxEmployeeId(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white text-xs font-medium"
+                >
+                  <option value="" disabled>-- اختر الموظف --</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.jobTitle}) - راتب أساسي: {emp.baseSalary.toLocaleString('en-US')} ج.م
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Amount & Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    المبلغ (ج.م) *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.01"
+                    required
+                    value={txAmount}
+                    onChange={e => setTxAmount(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white font-mono font-bold text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    تاريخ حدوث الحركة *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={txDate}
+                    onChange={e => {
+                      const newDate = e.target.value;
+                      setTxDate(newDate);
+                      if (newDate && (!txSalaryMonth || txSalaryMonth === txDate.slice(0, 7))) {
+                        setTxSalaryMonth(newDate.slice(0, 7));
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Salary Month & Reason / Title */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    تُخصم / تُضاف لراتب شهر *
+                  </label>
+                  <input
+                    type="month"
+                    required
+                    value={txSalaryMonth}
+                    onChange={e => setTxSalaryMonth(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    البيان / السبب *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={txTitle}
+                    onChange={e => setTxTitle(e.target.value)}
+                    placeholder={
+                      txType === 'ADVANCE' ? 'مثال: سلفة نقدية على الحساب' :
+                      txType === 'DEDUCTION' ? 'مثال: غياب يوم بدون إذن' :
+                      'مثال: حافز إنجاز ومجهود إضافي'
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* If Advance: Payment Method & Treasury Sync Checkbox */}
+              {txType === 'ADVANCE' && (
+                <div className="p-3 bg-rose-50/70 border border-rose-100 rounded-xl space-y-2.5">
+                  <div>
+                    <label className="block font-semibold text-rose-950 mb-1">طريقة صرف السلفة (من أين صُرفت؟)</label>
+                    <select
+                      value={txPaymentMethod}
+                      onChange={e => setTxPaymentMethod(e.target.value as PaymentMethod)}
+                      className="w-full px-3 py-1.5 border border-rose-200 rounded-lg bg-white text-xs"
+                    >
+                      <option value="CASH">كاش (من الخزينة النقدية)</option>
+                      <option value="VODAFONE_CASH">فودافون كاش / محفظة</option>
+                      <option value="INSTAPAY">إنستاباي / تحويل بنكي</option>
+                    </select>
+                  </div>
+
+                  {!editingTx && (
+                    <label className="flex items-center gap-2 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={txAutoCreateExpense}
+                        onChange={e => setTxAutoCreateExpense(e.target.checked)}
+                        className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300"
+                      />
+                      <span className="text-rose-900 font-medium text-[11px]">
+                        تسجيل خروج المبلغ فوراً كمصروف في الخزينة العامة (بند: سلف موظفين)
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">ملاحظات إضافية (اختياري)</label>
+                <textarea
+                  value={txNotes}
+                  onChange={e => setTxNotes(e.target.value)}
+                  rows={2}
+                  placeholder="أي تفاصيل أو ملاحظات أخرى خاصة بالحركة..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setIsTxModalOpen(false); setEditingTx(null); }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingTx}
+                  className={`px-5 py-2 rounded-xl text-white font-bold transition-all shadow-sm flex items-center gap-1.5 ${
+                    txType === 'ADVANCE'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : txType === 'DEDUCTION'
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {isSubmittingTx ? 'جارِ الحفظ...' : editingTx ? 'حفظ التعديلات' : (
+                    txType === 'ADVANCE' ? 'تسجيل السلفة' : txType === 'DEDUCTION' ? 'تسجيل الخصم' : 'تسجيل المكافأة'
+                  )}
                 </button>
               </div>
             </form>

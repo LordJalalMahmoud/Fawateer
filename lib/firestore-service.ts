@@ -11,7 +11,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { Invoice, ProductCatalogItem, ProductPricingTier, VaultSettings, CourierSettlement, ExpenseItem, Employee, SalaryPaymentRecord } from './types';
+import { Invoice, ProductCatalogItem, ProductPricingTier, VaultSettings, CourierSettlement, ExpenseItem, Employee, SalaryPaymentRecord, EmployeeTransaction } from './types';
 import { DEFAULT_PRICING_TIERS } from './pricing-data';
 
 const INVOICES_COLLECTION = 'invoices';
@@ -20,6 +20,7 @@ const COURIER_COLLECTION = 'courier_settlements';
 const EXPENSES_COLLECTION = 'expenses';
 const EMPLOYEES_COLLECTION = 'employees';
 const SALARY_PAYMENTS_COLLECTION = 'salary_payments';
+const EMPLOYEE_TRANSACTIONS_COLLECTION = 'employee_transactions';
 const SETTINGS_COLLECTION = 'settings';
 const PRICING_TIERS_DOC = 'pricing_tiers';
 const VAULT_SETTINGS_DOC = 'vault_permissions';
@@ -391,6 +392,52 @@ export async function saveSalaryPaymentToFirestore(payment: SalaryPaymentRecord)
  */
 export async function deleteSalaryPaymentFromFirestore(paymentId: string): Promise<void> {
   const docRef = doc(db, SALARY_PAYMENTS_COLLECTION, paymentId);
+  await deleteDoc(docRef);
+}
+
+/**
+ * Real-time listener for Employee Transactions (Advances, Deductions, Bonuses) in Firestore
+ */
+export function subscribeToEmployeeTransactions(
+  onData: (transactions: EmployeeTransaction[]) => void,
+  onError?: (err: Error) => void
+) {
+  const q = query(collection(db, EMPLOYEE_TRANSACTIONS_COLLECTION), orderBy('date', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: EmployeeTransaction[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          ...data,
+        } as EmployeeTransaction);
+      });
+      onData(items);
+    },
+    (error) => {
+      console.warn('Firestore onSnapshot employee_transactions error:', error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save / Update an Employee Transaction in Firestore
+ */
+export async function saveEmployeeTransactionToFirestore(transaction: EmployeeTransaction): Promise<void> {
+  const cleanData = cleanForFirestore(transaction);
+  const docRef = doc(db, EMPLOYEE_TRANSACTIONS_COLLECTION, transaction.id);
+  await setDoc(docRef, cleanData, { merge: true });
+}
+
+/**
+ * Delete an Employee Transaction in Firestore
+ */
+export async function deleteEmployeeTransactionFromFirestore(transactionId: string): Promise<void> {
+  const docRef = doc(db, EMPLOYEE_TRANSACTIONS_COLLECTION, transactionId);
   await deleteDoc(docRef);
 }
 

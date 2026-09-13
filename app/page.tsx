@@ -10,7 +10,8 @@ import {
   CourierSettlement,
   ExpenseItem,
   Employee,
-  SalaryPaymentRecord
+  SalaryPaymentRecord,
+  EmployeeTransaction
 } from '@/lib/types';
 import { 
   getStoredInvoices, 
@@ -29,6 +30,8 @@ import {
   saveStoredEmployees,
   getStoredSalaryPayments,
   saveStoredSalaryPayments,
+  getStoredEmployeeTransactions,
+  saveStoredEmployeeTransactions,
   resetToEmptyData,
   exportInvoicesToCSV 
 } from '@/lib/storage';
@@ -47,6 +50,9 @@ import {
   subscribeToSalaryPayments,
   saveSalaryPaymentToFirestore,
   deleteSalaryPaymentFromFirestore,
+  subscribeToEmployeeTransactions,
+  saveEmployeeTransactionToFirestore,
+  deleteEmployeeTransactionFromFirestore,
   saveInvoiceToFirestore, 
   deleteInvoiceFromFirestore, 
   saveProductsToFirestore,
@@ -109,6 +115,7 @@ function InvoicesDashboard() {
   const [expenses, setExpenses] = useState<ExpenseItem[]>(() => getStoredExpenses());
   const [employees, setEmployees] = useState<Employee[]>(() => getStoredEmployees());
   const [salaryPayments, setSalaryPayments] = useState<SalaryPaymentRecord[]>(() => getStoredSalaryPayments());
+  const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStoredEmployeeTransactions());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'local'>('synced');
 
   // Main ERP Module View Mode
@@ -223,6 +230,18 @@ function InvoicesDashboard() {
       }
     );
 
+    const unsubTransactions = subscribeToEmployeeTransactions(
+      (remoteTransactions) => {
+        if (remoteTransactions) {
+          setEmployeeTransactions(remoteTransactions);
+          saveStoredEmployeeTransactions(remoteTransactions);
+        }
+      },
+      (err) => {
+        console.warn('Employee transactions sync issue:', err);
+      }
+    );
+
     return () => {
       unsubInvoices();
       unsubProducts();
@@ -232,6 +251,7 @@ function InvoicesDashboard() {
       unsubExpenses();
       unsubEmployees();
       unsubSalaries();
+      unsubTransactions();
     };
   }, [user]);
 
@@ -435,6 +455,76 @@ function InvoicesDashboard() {
       showToast('تم إلغاء سجل صرف الراتب', 'info');
     } catch (e: any) {
       console.warn('Firestore delete salary payment error:', e);
+      showToast('تم الحذف محلياً', 'info');
+    }
+  };
+
+  // Actions: Employee Transactions (Advances, Deductions, Bonuses)
+  const handleSaveEmployeeTransaction = async (tx: EmployeeTransaction, autoCreateExpense = true) => {
+    let finalTx = { ...tx };
+
+    // If it's an advance and autoCreateExpense is requested, sync with general expenses
+    if (finalTx.type === 'ADVANCE' && autoCreateExpense) {
+      const expId = finalTx.expenseId || `exp-adv-${finalTx.id}`;
+      const advanceExpense: ExpenseItem = {
+        id: expId,
+        date: finalTx.date,
+        title: `سلفة موظف: ${finalTx.employeeName} (${finalTx.title || 'سلفة نقدية'})`,
+        amount: finalTx.amount,
+        category: 'EMPLOYEE_ADVANCE',
+        paymentMethod: finalTx.paymentMethod || 'CASH',
+        recipient: finalTx.employeeName,
+        employeeId: finalTx.employeeId,
+        salaryMonth: finalTx.salaryMonth,
+        notes: finalTx.notes || `سلفة تخص شهر استحقاق ${finalTx.salaryMonth}`,
+        createdAt: finalTx.createdAt,
+        updatedAt: new Date().toISOString(),
+      };
+      finalTx.expenseId = expId;
+      await handleSaveExpense(advanceExpense);
+    }
+
+    setEmployeeTransactions(prev => {
+      const existingIndex = prev.findIndex(t => t.id === finalTx.id);
+      let updated: EmployeeTransaction[];
+      if (existingIndex >= 0) {
+        updated = [...prev];
+        updated[existingIndex] = finalTx;
+      } else {
+        updated = [finalTx, ...prev];
+      }
+      saveStoredEmployeeTransactions(updated);
+      return updated;
+    });
+
+    try {
+      await saveEmployeeTransactionToFirestore(finalTx);
+      const typeLabel = finalTx.type === 'ADVANCE' ? 'سلفة' : finalTx.type === 'DEDUCTION' ? 'خصم / جزاء' : 'مكافأة / حافز';
+      showToast(`تم تسجيل ${typeLabel} للموظف (${finalTx.employeeName}) بنجاح`, 'success');
+    } catch (e: any) {
+      console.warn('Firestore employee transaction error:', e);
+      showToast(`حُفظت الحركة محلياً (${e?.message || 'تعذر الاتصال'})`, 'info');
+    }
+  };
+
+  const handleDeleteEmployeeTransaction = async (txId: string) => {
+    const txToDelete = employeeTransactions.find(t => t.id === txId);
+    setEmployeeTransactions(prev => {
+      const updated = prev.filter(t => t.id !== txId);
+      saveStoredEmployeeTransactions(updated);
+      return updated;
+    });
+
+    // If there was an associated expense recorded in the treasury, remove it as well
+    if (txToDelete?.expenseId) {
+      await handleDeleteExpense(txToDelete.expenseId).catch(() => {});
+    }
+
+    try {
+      await deleteEmployeeTransactionFromFirestore(txId);
+      showToast('تم حذف الحركة بنجاح', 'info');
+    } catch (e: any) {
+      console.warn('Firestore delete employee transaction error:', e);
       showToast('تم الحذف محلياً', 'info');
     }
   };
@@ -909,6 +999,7 @@ function InvoicesDashboard() {
           expenses={expenses}
           employees={employees}
           salaryPayments={salaryPayments}
+          employeeTransactions={employeeTransactions}
           invoices={invoices}
           onSaveExpense={handleSaveExpense}
           onDeleteExpense={handleDeleteExpense}
@@ -916,6 +1007,8 @@ function InvoicesDashboard() {
           onDeleteEmployee={handleDeleteEmployee}
           onSaveSalaryPayment={handleSaveSalaryPayment}
           onDeleteSalaryPayment={handleDeleteSalaryPayment}
+          onSaveEmployeeTransaction={handleSaveEmployeeTransaction}
+          onDeleteEmployeeTransaction={handleDeleteEmployeeTransaction}
           currentUserEmail={user?.email}
           initialTab="EXPENSES"
         />
@@ -926,6 +1019,7 @@ function InvoicesDashboard() {
           expenses={expenses}
           employees={employees}
           salaryPayments={salaryPayments}
+          employeeTransactions={employeeTransactions}
           invoices={invoices}
           onSaveExpense={handleSaveExpense}
           onDeleteExpense={handleDeleteExpense}
@@ -933,6 +1027,8 @@ function InvoicesDashboard() {
           onDeleteEmployee={handleDeleteEmployee}
           onSaveSalaryPayment={handleSaveSalaryPayment}
           onDeleteSalaryPayment={handleDeleteSalaryPayment}
+          onSaveEmployeeTransaction={handleSaveEmployeeTransaction}
+          onDeleteEmployeeTransaction={handleDeleteEmployeeTransaction}
           currentUserEmail={user?.email}
           initialTab="PAYROLL"
         />
@@ -1085,6 +1181,7 @@ function InvoicesDashboard() {
         expenses={expenses}
         employees={employees}
         salaryPayments={salaryPayments}
+        employeeTransactions={employeeTransactions}
         invoices={invoices}
         onSaveExpense={handleSaveExpense}
         onDeleteExpense={handleDeleteExpense}
@@ -1092,6 +1189,8 @@ function InvoicesDashboard() {
         onDeleteEmployee={handleDeleteEmployee}
         onSaveSalaryPayment={handleSaveSalaryPayment}
         onDeleteSalaryPayment={handleDeleteSalaryPayment}
+        onSaveEmployeeTransaction={handleSaveEmployeeTransaction}
+        onDeleteEmployeeTransaction={handleDeleteEmployeeTransaction}
         currentUserEmail={user?.email}
       />
 
