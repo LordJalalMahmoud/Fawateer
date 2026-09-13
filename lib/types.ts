@@ -255,6 +255,7 @@ export interface ExpenseItem {
   office?: string; // اسم المكتب أو الفرع (e.g. المكتب الرئيسي، مكتب 1، مكتب 2...)
   partnerName?: string; // اسم الشريك (مثل مهجة) في حالة مسحوبات الأرباح
   isPartnerDrawing?: boolean; // هل هذا المصروف مسحوب من الأرباح السنوية لشريك
+  salaryMonth?: string; // شهر الراتب المستحق (YYYY-MM) عند تسجيل مصروف برواتب
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -279,8 +280,9 @@ export interface SalaryPaymentRecord {
   id: string;
   employeeId: string;
   employeeName: string;
-  month: string; // YYYY-MM
-  paymentDate: string; // YYYY-MM-DD
+  month: string; // YYYY-MM (للتوافق وقواعد البيانات القديمة)
+  salaryMonth?: string; // شهر الراتب المستحق محاسبياً (YYYY-MM) مثل: 2026-06
+  paymentDate: string; // تاريخ الصرف الفعلي (YYYY-MM-DD) مثل: 2026-07-02
   baseSalary: number;
   allowances: number; // بدلات
   commissions?: number; // عمولات المبيعات المحسوبة من الفواتير

@@ -34,6 +34,7 @@ import {
   Phone,
   Briefcase,
   AlertCircle,
+  Info,
   Clock,
   ArrowDownRight,
   ShieldCheck,
@@ -569,6 +570,9 @@ export function ExpensesPayrollModal({
   const [salPaymentMethod, setSalPaymentMethod] = useState<PaymentMethod>('CASH');
   const [salNotes, setSalNotes] = useState('');
   const [isSubmittingSalary, setIsSubmittingSalary] = useState(false);
+  const [editingSalaryPayment, setEditingSalaryPayment] = useState<SalaryPaymentRecord | null>(null);
+  const [salarySlipToPrint, setSalarySlipToPrint] = useState<SalaryPaymentRecord | null>(null);
+  const [expSalaryMonth, setExpSalaryMonth] = useState<string>('');
 
   // Available Offices extracted from expenses + default list
   const availableOffices = useMemo(() => {
@@ -783,7 +787,7 @@ export function ExpensesPayrollModal({
   const monthPayrollData = useMemo(() => {
     return employees.map(emp => {
       const existingPayment = salaryPayments.find(
-        p => p.employeeId === emp.id && p.month === selectedPayrollMonth && p.status === 'PAID'
+        p => p.employeeId === emp.id && (p.salaryMonth || p.month) === selectedPayrollMonth && p.status === 'PAID'
       );
       const baseSalary = Number(emp.baseSalary || 0);
       const allowances = Number(emp.fixedAllowances || 0);
@@ -1053,15 +1057,25 @@ export function ExpensesPayrollModal({
   };
 
   // Handlers: Open Salary Disbursement for single employee (supports deductions & advances)
-  const handleOpenDisburseSalary = (emp: Employee) => {
-    const stats = getEmployeeCommissionStats(invoices, emp.id, selectedPayrollMonth);
-    const existing = salaryPayments.find(p => p.employeeId === emp.id && p.month === selectedPayrollMonth);
+  const handleOpenDisburseSalary = (emp: Employee, paymentToEdit?: SalaryPaymentRecord) => {
+    const existing = paymentToEdit || salaryPayments.find(
+      p => p.employeeId === emp.id && (p.salaryMonth || p.month) === selectedPayrollMonth
+    );
+    setEditingSalaryPayment(existing || null);
     setDisbursingEmployee(emp);
-    setSalMonth(selectedPayrollMonth);
-    setSalPaymentDate(new Date().toISOString().slice(0, 10));
+
+    const initialMonth = existing?.salaryMonth || existing?.month || selectedPayrollMonth;
+    setSalMonth(initialMonth);
+
+    // CRITICAL (Req 2, 4, 8): If editing existing payment, preserve real paymentDate!
+    // Default to today only for a brand new payment.
+    setSalPaymentDate(existing?.paymentDate || new Date().toISOString().slice(0, 10));
+
     setSalBaseSalary(existing ? existing.baseSalary : Number(emp.baseSalary || 0));
     setSalAllowances(existing ? existing.allowances : Number(emp.fixedAllowances || 0));
     setSalBonuses(existing ? existing.bonuses : 0);
+
+    const stats = getEmployeeCommissionStats(invoices, emp.id, initialMonth);
     setSalCommissions(existing?.commissions !== undefined ? existing.commissions : stats.totalCommissions);
     setSalCommissionInvoicesCount(existing?.commissionInvoicesCount !== undefined ? existing.commissionInvoicesCount : stats.invoicesCount);
     setSalDeductions(existing ? (existing.deductions || 0) : 0);
@@ -1080,15 +1094,16 @@ export function ExpensesPayrollModal({
     try {
       const netToPay = Math.max(0, salBaseSalary + salAllowances + salBonuses + salCommissions - salDeductions - salAdvances);
       const nowIso = new Date().toISOString();
-      const existing = salaryPayments.find(p => p.employeeId === disbursingEmployee.id && p.month === salMonth);
 
-      const recordId = existing?.id || `sal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      // If editing existing payment, preserve record ID so it updates in-place without duplicating
+      const recordId = editingSalaryPayment?.id || `sal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const paymentRecord: SalaryPaymentRecord = {
         id: recordId,
         employeeId: disbursingEmployee.id,
         employeeName: disbursingEmployee.name,
-        month: salMonth,
-        paymentDate: salPaymentDate,
+        month: salMonth, // Backward compatibility
+        salaryMonth: salMonth, // Req 1 & 4: Explicit Salary Month (YYYY-MM)
+        paymentDate: salPaymentDate, // Req 2 & 7: Actual Cash Payment Date (YYYY-MM-DD)
         baseSalary: salBaseSalary,
         allowances: salAllowances,
         bonuses: salBonuses,
@@ -1100,12 +1115,13 @@ export function ExpensesPayrollModal({
         paymentMethod: salPaymentMethod,
         notes: salNotes.trim() || undefined,
         status: 'PAID',
-        createdAt: existing?.createdAt || nowIso,
+        createdAt: editingSalaryPayment?.createdAt || nowIso,
         updatedAt: nowIso,
       };
 
       await onSaveSalaryPayment(paymentRecord, true);
       setIsSalaryDisburseModalOpen(false);
+      setEditingSalaryPayment(null);
       confetti({ particleCount: 40, spread: 60 });
     } finally {
       setIsSubmittingSalary(false);
@@ -1150,6 +1166,7 @@ export function ExpensesPayrollModal({
           employeeId: emp.id,
           employeeName: emp.name,
           month: selectedPayrollMonth,
+          salaryMonth: selectedPayrollMonth,
           paymentDate: batchDisburseDate,
           baseSalary: item.baseSalary,
           allowances: item.allowances,
@@ -1203,12 +1220,29 @@ export function ExpensesPayrollModal({
 
   // Export Payroll to CSV
   const handleExportPayrollCSV = () => {
-    const headers = ['اسم الموظف', 'الوظيفة', 'الهاتف', 'الشهر', 'الراتب الأساسي', 'البدلات', 'المكافآت', 'عمولات المبيعات', 'الخصومات', 'السلف الشخصية', 'الصافي المستحق/المدفوع', 'حالة الصرف', 'تاريخ الصرف'];
+    const headers = [
+      'اسم الموظف',
+      'الوظيفة',
+      'الهاتف',
+      'شهر الراتب المستحق (Salary Month)',
+      'تاريخ الصرف الفعلي (Payment Date)',
+      'الراتب الأساسي',
+      'البدلات',
+      'المكافآت',
+      'عمولات المبيعات',
+      'الخصومات',
+      'السلف الشخصية',
+      'الصافي المستحق/المدفوع',
+      'حالة الصرف',
+      'طريقة الصرف',
+      'ملاحظات الصرف',
+    ];
     const rows = monthPayrollData.map(item => [
       `"${item.employee.name.replace(/"/g, '""')}"`,
       `"${item.employee.jobTitle.replace(/"/g, '""')}"`,
       item.employee.phone || '—',
-      selectedPayrollMonth,
+      item.payment?.salaryMonth || item.payment?.month || selectedPayrollMonth,
+      item.payment?.paymentDate || '—',
       item.baseSalary,
       item.allowances,
       item.payment?.bonuses || 0,
@@ -1217,7 +1251,8 @@ export function ExpensesPayrollModal({
       item.advances || 0,
       item.netPaid,
       item.isPaid ? 'تم الصرف' : 'متبقي',
-      item.payment?.paymentDate || '—',
+      item.payment ? (PAYMENT_METHOD_LABELS[item.payment.paymentMethod]?.label || item.payment.paymentMethod) : '—',
+      `"${(item.payment?.notes || '').replace(/"/g, '""')}"`,
     ]);
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -2613,7 +2648,7 @@ export function ExpensesPayrollModal({
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {activeAndOnLeaveEmployees.map(emp => {
                       const currentMonthPayment = salaryPayments.find(
-                        p => p.employeeId === emp.id && p.month === selectedPayrollMonth && p.status === 'PAID'
+                        p => p.employeeId === emp.id && (p.salaryMonth || p.month) === selectedPayrollMonth && p.status === 'PAID'
                       );
                       const isPaidThisMonth = Boolean(currentMonthPayment);
 
@@ -3059,10 +3094,23 @@ export function ExpensesPayrollModal({
                               </td>
                               <td className="py-3 px-4 text-center whitespace-nowrap">
                                 {isPaid ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                    <span>تم الصرف</span>
-                                  </span>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      <span>تم الصرف</span>
+                                    </span>
+                                    {payment && (
+                                      <div className="flex flex-col items-center gap-0.5 text-[10px]">
+                                        <span className="text-slate-300 font-mono flex items-center gap-1">
+                                          <Calendar className="w-2.5 h-2.5 text-slate-400" />
+                                          <span>صُرف: {payment.paymentDate}</span>
+                                        </span>
+                                        <span className="text-purple-300/80 font-medium">
+                                          عن شهر: {formatArabicMonth(payment.salaryMonth || payment.month)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
                                     <Clock className="w-3 h-3 text-amber-400" />
@@ -3071,16 +3119,28 @@ export function ExpensesPayrollModal({
                                 )}
                               </td>
                               <td className="py-3 px-4 text-center whitespace-nowrap">
-                                <button
-                                  onClick={() => handleOpenDisburseSalary(employee)}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                    isPaid
-                                      ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-                                      : 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30'
-                                  }`}
-                                >
-                                  {isPaid ? 'تعديل الصرف' : 'صرف الآن'}
-                                </button>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenDisburseSalary(employee, payment)}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                      isPaid
+                                        ? 'bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white border border-slate-700'
+                                        : 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30'
+                                    }`}
+                                  >
+                                    {isPaid ? 'تعديل الراتب' : 'صرف الآن'}
+                                  </button>
+                                  {isPaid && payment && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSalarySlipToPrint(payment)}
+                                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-purple-300 rounded-xl transition-all cursor-pointer border border-slate-700"
+                                      title="طباعة إيصال / سند صرف الراتب"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -3658,39 +3718,56 @@ export function ExpensesPayrollModal({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">
-                    صرف راتب الموظف: {disbursingEmployee.name}
+                    {editingSalaryPayment ? 'تعديل سجل صرف راتب' : 'صرف راتب الموظف'}: {disbursingEmployee.name}
                   </h3>
-                  <span className="text-xs text-purple-300 font-mono">
-                    شهر: {salMonth}
-                  </span>
+                  <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                    <span className="text-purple-300 font-mono">شهر الراتب: {salMonth}</span>
+                    <span>•</span>
+                    <span className="text-slate-300 font-mono">تاريخ الصرف: {salPaymentDate}</span>
+                  </div>
                 </div>
               </div>
               <button
-                onClick={() => setIsSalaryDisburseModalOpen(false)}
+                onClick={() => {
+                  setIsSalaryDisburseModalOpen(false);
+                  setEditingSalaryPayment(null);
+                }}
                 className="p-1.5 text-slate-400 hover:text-white rounded-lg"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
+            {editingSalaryPayment && (
+              <div className="p-3 bg-purple-950/40 border border-purple-800/60 rounded-xl text-xs text-purple-200 flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-white mb-0.5">تعديل صرف مسجل مسبقاً</div>
+                  <div className="text-[11px] text-purple-300/80 leading-relaxed">
+                    تعديل <strong>شهر الراتب (Salary Month)</strong> يربط الراتب محاسبياً بالشهر المختار دون تغيير <strong>تاريخ الصرف الفعلي</strong> ودون تكرار السجل في قاعدة البيانات.
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSaveSalaryDisburseSubmit} className="space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl">
                 <SmartMonthInput
-                  label="شهر الاستحقاق"
+                  label="شهر الراتب (Salary Month)"
                   value={salMonth}
                   onChange={setSalMonth}
                   accentColor="purple"
-                  hint="الشهر المحسوب عنه الراتب"
+                  hint="الشهر المستحق محاسبياً (مثلاً: 2026-06)"
                 />
 
                 <SmartDateInput
-                  label="تاريخ الصرف الفعلي"
+                  label="تاريخ الصرف الفعلي (Payment Date)"
                   value={salPaymentDate}
                   onChange={setSalPaymentDate}
                   targetMonth={salMonth}
                   accentColor="purple"
                   presets={['today', 'yesterday', 'month-25', 'month-start', 'month-end']}
-                  hint="تاريخ خروج النقدية"
+                  hint="تاريخ خروج النقدية الفعلي (مثلاً: 2026-07-02)"
                 />
               </div>
 
@@ -3842,24 +3919,43 @@ export function ExpensesPayrollModal({
               </div>
 
               <p className="text-[11px] text-slate-400 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                💡 سيتم إدراج هذا الراتب تلقائياً في سجل المصروفات العام تحت بند &ldquo;رواتب وأجور&rdquo; لتوثيق حركة الخزينة بدون ازدواجية.
+                💡 يتم توثيق حركة الصرف وفقاً لـ <strong>تاريخ الصرف الفعلي</strong> في سجل النقدية، بينما يتم إسناد الراتب محاسبياً لـ <strong>شهر الراتب</strong> في التقارير والمسيرات.
               </p>
 
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+                {editingSalaryPayment && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (confirm(`هل أنت متأكد من رغبتك في إلغاء وحذف سجل صرف هذا الراتب للموظف (${disbursingEmployee.name})؟`)) {
+                        await onDeleteSalaryPayment(editingSalaryPayment.id);
+                        setIsSalaryDisburseModalOpen(false);
+                        setEditingSalaryPayment(null);
+                      }
+                    }}
+                    className="ml-auto px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-800/60 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>إلغاء وحذف الصرف</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setIsSalaryDisburseModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 rounded-xl"
+                  onClick={() => {
+                    setIsSalaryDisburseModalOpen(false);
+                    setEditingSalaryPayment(null);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 rounded-xl cursor-pointer"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingSalary}
-                  className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-xl shadow-md shadow-purple-600/30 transition-all flex items-center gap-1.5"
+                  className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-xl shadow-md shadow-purple-600/30 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{isSubmittingSalary ? 'جاري توثيق الصرف...' : 'توثيق وصرف الراتب'}</span>
+                  <span>{isSubmittingSalary ? 'جاري الحفظ...' : editingSalaryPayment ? 'حفظ تعديلات الراتب' : 'توثيق وصرف الراتب'}</span>
                 </button>
               </div>
             </form>
@@ -4299,6 +4395,141 @@ export function ExpensesPayrollModal({
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>طباعة السند</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* PRINT DIALOG: SALARY PAYMENT SLIP (سند / إيصال صرف راتب) */}
+      {/* ========================================================================= */}
+      {salarySlipToPrint && (
+        <div className="fixed inset-0 z-70 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 text-right">
+          <div className="relative w-full max-w-lg bg-white text-slate-900 rounded-2xl shadow-2xl p-6 space-y-4">
+            
+            {/* Printable Slip Content */}
+            <div className="border-2 border-slate-800 rounded-xl p-5 space-y-4" dir="rtl">
+              <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">سند صرف راتب شهري</h2>
+                  <span className="text-xs text-slate-600 font-mono">Salary Payment Voucher</span>
+                </div>
+                <div className="text-left font-mono text-xs">
+                  <div>تاريخ الصرف: <strong className="text-slate-900">{salarySlipToPrint.paymentDate}</strong></div>
+                  <div>رقم السند: SAL-{salarySlipToPrint.id.slice(-6)}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 text-xs sm:text-sm">
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-600 font-semibold">الموظف المستفيد:</span>
+                  <span className="font-bold text-slate-900 text-sm">{salarySlipToPrint.employeeName}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 py-1.5 border-b border-slate-200 bg-purple-50/70 p-2.5 rounded-lg">
+                  <div>
+                    <span className="text-purple-900 font-semibold block text-xs">شهر الراتب المستحق:</span>
+                    <span className="font-bold text-purple-950 text-sm font-mono">
+                      {formatArabicMonth(salarySlipToPrint.salaryMonth || salarySlipToPrint.month)} ({salarySlipToPrint.salaryMonth || salarySlipToPrint.month})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-600 font-semibold block text-xs">تاريخ الصرف الفعلي:</span>
+                    <span className="font-bold text-slate-900 text-sm font-mono">
+                      {salarySlipToPrint.paymentDate}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Financial breakdown table */}
+                <div className="border border-slate-300 rounded-lg overflow-hidden my-2">
+                  <div className="bg-slate-100 px-3 py-1.5 font-bold text-xs text-slate-700 border-b border-slate-300 flex justify-between">
+                    <span>بيان المستحقات والاستقطاعات</span>
+                    <span>المبلغ (ج.م)</span>
+                  </div>
+                  <div className="divide-y divide-slate-200 text-xs">
+                    <div className="px-3 py-1.5 flex justify-between">
+                      <span className="text-slate-600">الراتب الأساسي</span>
+                      <span className="font-mono font-semibold">{salarySlipToPrint.baseSalary.toLocaleString()} ج.م</span>
+                    </div>
+                    {salarySlipToPrint.allowances > 0 && (
+                      <div className="px-3 py-1.5 flex justify-between text-emerald-800">
+                        <span>+ البدلات الثابتة</span>
+                        <span className="font-mono font-semibold">+{salarySlipToPrint.allowances.toLocaleString()} ج.م</span>
+                      </div>
+                    )}
+                    {(salarySlipToPrint.bonuses || 0) > 0 && (
+                      <div className="px-3 py-1.5 flex justify-between text-purple-800">
+                        <span>+ مكافآت وحوافز</span>
+                        <span className="font-mono font-semibold">+{(salarySlipToPrint.bonuses || 0).toLocaleString()} ج.م</span>
+                      </div>
+                    )}
+                    {(salarySlipToPrint.commissions || 0) > 0 && (
+                      <div className="px-3 py-1.5 flex justify-between text-indigo-800">
+                        <span>+ عمولات مبيعات الفواتير {salarySlipToPrint.commissionInvoicesCount ? `(${salarySlipToPrint.commissionInvoicesCount} فاتورة)` : ''}</span>
+                        <span className="font-mono font-semibold">+{(salarySlipToPrint.commissions || 0).toLocaleString()} ج.م</span>
+                      </div>
+                    )}
+                    {(salarySlipToPrint.deductions || 0) > 0 && (
+                      <div className="px-3 py-1.5 flex justify-between text-rose-800">
+                        <span>- خصومات وجزاءات</span>
+                        <span className="font-mono font-semibold">-{(salarySlipToPrint.deductions || 0).toLocaleString()} ج.م</span>
+                      </div>
+                    )}
+                    {(salarySlipToPrint.advances || 0) > 0 && (
+                      <div className="px-3 py-1.5 flex justify-between text-amber-800">
+                        <span>- سلف شخصية ومسحوبات</span>
+                        <span className="font-mono font-semibold">-{(salarySlipToPrint.advances || 0).toLocaleString()} ج.م</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-slate-900 text-white px-3 py-2 font-bold text-sm flex justify-between items-center">
+                    <span>صافي الراتب المصروف (المبلغ):</span>
+                    <span className="font-mono text-base text-emerald-400">{salarySlipToPrint.netPaid.toLocaleString()} ج.م</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between py-1 border-b border-slate-200">
+                  <span className="text-slate-600 font-semibold">طريقة الصرف:</span>
+                  <span className="text-slate-800">{PAYMENT_METHOD_LABELS[salarySlipToPrint.paymentMethod]?.label || salarySlipToPrint.paymentMethod}</span>
+                </div>
+
+                {salarySlipToPrint.notes && (
+                  <div className="py-1 text-slate-600 text-xs">
+                    <span className="font-semibold">ملاحظات: </span>
+                    {salarySlipToPrint.notes}
+                  </div>
+                )}
+              </div>
+
+              {/* Signatures */}
+              <div className="pt-6 grid grid-cols-2 gap-4 text-center text-xs border-t-2 border-slate-800">
+                <div>
+                  <span className="font-bold block text-slate-800">المحاسب / إدارة الحسابات</span>
+                  <div className="mt-6 border-b border-slate-400 w-3/4 mx-auto"></div>
+                </div>
+                <div>
+                  <span className="font-bold block text-slate-800">توقيع الموظف المستلم</span>
+                  <div className="mt-6 border-b border-slate-400 w-3/4 mx-auto"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Print Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 no-print">
+              <button
+                onClick={() => setSalarySlipToPrint(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl cursor-pointer"
+              >
+                إغلاق
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-purple-700 hover:bg-purple-600 rounded-xl shadow-md cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>طباعة سند الراتب</span>
               </button>
             </div>
           </div>
