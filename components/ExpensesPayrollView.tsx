@@ -54,6 +54,7 @@ import {
 import confetti from 'canvas-confetti';
 import { ExpenseItem, Employee, SalaryPaymentRecord, ExpenseCategory, PaymentMethod, Invoice } from '@/lib/types';
 import { getMonthlyCommissionsOverview, getEmployeeCommissionStats } from '@/lib/commission-analytics';
+import { MonthPicker } from '@/components/MonthPicker';
 
 export const DEFAULT_OFFICES = [
   'المكتب الرئيسي',
@@ -571,6 +572,16 @@ export function ExpensesPayrollView({
     setIsSalaryDisburseModalOpen(true);
   };
 
+  const handleSalaryMonthChange = (newMonth: string) => {
+    setSalMonth(newMonth);
+    // Auto refresh commissions if disbursing a new payment for a different month
+    if (!editingSalaryPayment && disbursingEmployee) {
+      const stats = getEmployeeCommissionStats(invoices, disbursingEmployee.id, newMonth);
+      setSalCommissions(stats.totalCommissions);
+      setSalCommissionInvoicesCount(stats.invoicesCount);
+    }
+  };
+
   const handleSaveSalaryDisburseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!disbursingEmployee) return;
@@ -766,7 +777,7 @@ export function ExpensesPayrollView({
         {/* Unpaid Salaries for Selected Month */}
         <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="font-semibold">رواتب متبقية لشهر ({selectedPayrollMonth})</span>
+            <span className="font-semibold">رواتب متبقية لشهر ({formatArabicMonth(selectedPayrollMonth)})</span>
             <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
               <Clock className="w-3.5 h-3.5" />
             </div>
@@ -860,18 +871,15 @@ export function ExpensesPayrollView({
 
             <div className="flex items-center gap-2 flex-wrap">
               {/* Month Selector */}
-              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 gap-1 text-xs">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <input
-                  type="month"
-                  value={selectedExpenseMonth}
-                  onChange={(e) => {
-                    setSelectedExpenseMonth(e.target.value);
-                    setIsAllMonthsExpenseMode(false);
-                  }}
-                  className="bg-transparent text-xs font-bold font-mono outline-hidden cursor-pointer text-slate-700"
-                />
-              </div>
+              <MonthPicker
+                value={selectedExpenseMonth}
+                onChange={(m) => {
+                  setSelectedExpenseMonth(m);
+                  setIsAllMonthsExpenseMode(false);
+                }}
+                variant="default"
+                size="sm"
+              />
 
               {/* Office Selector */}
               <select
@@ -1048,18 +1056,12 @@ export function ExpensesPayrollView({
             
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-700">شهر مسير الرواتب:</span>
-              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 gap-1 text-xs">
-                <Calendar className="w-3.5 h-3.5 text-purple-600" />
-                <input
-                  type="month"
-                  value={selectedPayrollMonth}
-                  onChange={(e) => setSelectedPayrollMonth(e.target.value)}
-                  className="bg-transparent text-xs font-bold font-mono outline-hidden cursor-pointer text-slate-800"
-                />
-              </div>
-              <span className="text-xs text-purple-700 font-bold hidden sm:inline">
-                ({formatArabicMonth(selectedPayrollMonth)})
-              </span>
+              <MonthPicker
+                value={selectedPayrollMonth}
+                onChange={setSelectedPayrollMonth}
+                variant="purple"
+                size="sm"
+              />
             </div>
 
             <div className="flex items-center gap-2">
@@ -1587,19 +1589,19 @@ export function ExpensesPayrollView({
             </div>
             <form onSubmit={handleSaveSalaryDisburseSubmit} className="p-4 space-y-3 text-xs">
               {/* Separate Salary Month & Payment Date */}
-              <div className="grid grid-cols-2 gap-3 p-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80">
                 <div>
                   <label className="block font-bold text-purple-900 mb-1">
                     شهر الراتب (Salary Month) *
                   </label>
-                  <input
-                    type="month"
-                    required
+                  <MonthPicker
                     value={salMonth}
-                    onChange={e => setSalMonth(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded-lg bg-white font-mono font-bold text-xs text-purple-900"
+                    onChange={handleSalaryMonthChange}
+                    variant="purple"
+                    size="md"
+                    className="w-full"
                   />
-                  <span className="text-[10px] text-purple-700 mt-0.5 block">الشهر الذي يخصه الراتب</span>
+                  <span className="text-[10px] text-purple-700 mt-1 block">الشهر الذي يخصه الراتب</span>
                 </div>
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">
@@ -1610,9 +1612,9 @@ export function ExpensesPayrollView({
                     required
                     value={salPaymentDate}
                     onChange={e => setSalPaymentDate(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono text-xs text-slate-800"
+                    className="w-full h-9 px-2.5 py-1.5 border border-slate-300 rounded-xl bg-white font-mono text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-purple-400"
                   />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">تاريخ خروج النقدية الفعلي</span>
+                  <span className="text-[10px] text-slate-500 mt-1 block">تاريخ خروج النقدية الفعلي ({formatArabicDate(salPaymentDate)})</span>
                 </div>
               </div>
 
