@@ -124,30 +124,25 @@ export function DashboardOverview({
   return (
     <div className="space-y-6">
       
-      {/* 1. Page Header: Title + Short Description + Key Actions */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-2xs">
+      {/* 1. Page Header (Clean open ERP header layout, not a boxed card) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-              لوحة التحكم المالية
-            </h1>
-            <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-mono">
-              مباشر
-            </span>
-          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            لوحة التحكم والمؤشرات المالية
+          </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
-            ملخص الوضع المالي الحالي، متابعة التدفقات النقدية، آخر الفواتير وسجل التحصيلات السريعة.
+            ملخص الوضع المالي الحالي، متابعة التدفقات النقدية، وآخر الفواتير والتحصيلات المسجلة.
           </p>
         </div>
 
         {/* Primary & Secondary Actions */}
-        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap sm:flex-nowrap">
           <button
             onClick={onOpenNewMerchant}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
-            <span>+ فتح حساب تاجر</span>
+            <span>فتح حساب تاجر</span>
           </button>
 
           <button
@@ -155,7 +150,7 @@ export function DashboardOverview({
             className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap"
           >
             <FilePlus className="w-4 h-4" />
-            <span>+ فاتورة جديدة</span>
+            <span>فاتورة جديدة</span>
           </button>
         </div>
       </div>
