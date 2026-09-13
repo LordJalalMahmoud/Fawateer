@@ -155,73 +155,67 @@ export function DashboardOverview({
         </div>
       </div>
 
-      {/* 2. Compact Metric Strip (Dense summary, no bulky cards) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        
-        {/* Total Sales */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="font-semibold">إجمالي المبيعات</span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <TrendingUp className="w-3.5 h-3.5" />
+      {/* 2. Financial Summary Strip (Toolbar-style metrics bar, flat, no cards) */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          
+          {/* 1. إجمالي المبيعات */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between border-b sm:border-b-0 sm:border-e border-slate-100">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+              <TrendingUp className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>إجمالي المبيعات</span>
+            </div>
+            <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 tracking-tight my-1.5">
+              {formatEGP(totalSales)}
+            </div>
+            <div className="text-[11px] text-slate-400">
+              {invoices.length} فاتورة مسجلة
             </div>
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 mt-1.5">
-            {formatEGP(totalSales)}
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">
-            {invoices.length} فاتورة مسجلة
-          </div>
-        </div>
 
-        {/* Total Debt */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-rose-200/80 bg-rose-50/10 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-rose-800">
-            <span className="font-semibold">المديونيات المعلقة</span>
-            <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
-              <AlertCircle className="w-3.5 h-3.5" />
+          {/* 2. المديونيات المعلقة */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between border-b sm:border-b-0 lg:border-e border-slate-100">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              <span>المديونيات المعلقة</span>
+            </div>
+            <div className="text-xl sm:text-2xl font-bold font-mono text-rose-600 tracking-tight my-1.5">
+              {formatEGP(totalRemainingDebt)}
+            </div>
+            <div className="text-[11px] text-slate-400">
+              طرف {customersWithDebt.length} تاجر ومحل
             </div>
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-rose-700 mt-1.5">
-            {formatEGP(totalRemainingDebt)}
-          </div>
-          <div className="text-[11px] text-rose-600/80 mt-1">
-            طرف {customersWithDebt.length} تاجر ومحل
-          </div>
-        </div>
 
-        {/* Total Collections */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-emerald-200/80 bg-emerald-50/10 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-emerald-800">
-            <span className="font-semibold">التحصيلات النقدية</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+          {/* 3. التحصيلات النقدية */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between border-b sm:border-b-0 sm:border-e border-slate-100 sm:border-t lg:border-t-0">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>التحصيلات النقدية</span>
+            </div>
+            <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-600 tracking-tight my-1.5">
+              {formatEGP(totalPaid)}
+            </div>
+            <div className="text-[11px] text-slate-400">
+              معدل التحصيل {collectionRate}%
             </div>
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-emerald-700 mt-1.5">
-            {formatEGP(totalPaid)}
-          </div>
-          <div className="text-[11px] text-emerald-600/80 mt-1">
-            معدل السيولة {collectionRate}%
-          </div>
-        </div>
 
-        {/* Total Customers */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="font-semibold">عدد العملاء والتجار</span>
-            <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
-              <Users className="w-3.5 h-3.5" />
+          {/* 4. العملاء والتجار */}
+          <div className="p-4 sm:p-5 flex flex-col justify-between sm:border-t lg:border-t-0 border-slate-100">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+              <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>عدد العملاء والتجار</span>
+            </div>
+            <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 tracking-tight my-1.5">
+              {customerBalances.length} <span className="text-xs font-normal text-slate-400 font-sans">عميل</span>
+            </div>
+            <div className="text-[11px] text-slate-400">
+              {customerBalances.length - customersWithDebt.length} خالص السداد بالكامل
             </div>
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 mt-1.5">
-            {customerBalances.length} <span className="text-xs font-normal text-slate-500">عميل</span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">
-            {customerBalances.length - customersWithDebt.length} خالص السداد بالكامل
-          </div>
-        </div>
 
+        </div>
       </div>
 
       {/* 3. Main Content: Real Data Tables (Recent Invoices & Recent Collections) */}
