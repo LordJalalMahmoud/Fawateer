@@ -2,9 +2,99 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // السماح بالقراءة والكتابة للمستخدمين المسجلين بحسابهم
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+        (('email' in request.auth.token && 
+          (request.auth.token.email == 'jalalmahmoud8000@gmail.com' || request.auth.token.email == 'admin@fawateer.com')) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    // ========================================================
+    // 1. قواعد منظومة إدارة الفواتير والحسابات (Invoices & System)
+    // ========================================================
+
+    // الفواتير، حسابات التجار والعملاء، المسحوبات والتحصيلات
+    match /invoices/{invoiceId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // تحصيلات وتسويات شركات الشحن
+    match /courier_settlements/{settlementId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // المصروفات العامة
+    match /expenses/{expenseId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // سجل الموظفين
+    match /employees/{employeeId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // سجل صرف الرواتب والعمولات
+    match /salary_payments/{paymentId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // سجل حركات الموظفين (السلف النقدية، الخصومات والجزاءات، والمكافآت)
+    match /employee_transactions/{transactionId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // الإعدادات وقوائم الأسعار وخزنة الأرباح
+    match /settings/{settingId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // سجل المسؤولين والصلاحيات الإدارية
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // فحص الاتصال بالنظام والمديرين المعتمدين
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // ========================================================
+    // 2. قواعد المتجر الإلكتروني (Store & Products)
+    // ========================================================
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /offers/{offerId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow create: if true;
+      allow read, update, delete: if isSignedIn();
     }
   }
 }
