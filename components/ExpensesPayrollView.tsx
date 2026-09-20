@@ -1132,7 +1132,7 @@ export function ExpensesPayrollView({
         {/* Monthly Payroll Obligation */}
         <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="font-semibold">التزامات رواتب الموظفين</span>
+            <span className="font-semibold">الرواتب التعاقدية الأساسية</span>
             <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center">
               <Users className="w-3.5 h-3.5" />
             </div>
@@ -1141,7 +1141,7 @@ export function ExpensesPayrollView({
             {formatEGP(totalMonthlyPayrollObligation)}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
-            لكل {activeAndOnLeaveEmployees.length} موظف وعامل نشط
+            الأساسي والبدلات الثابتة لـ {activeAndOnLeaveEmployees.length} موظف نشط
           </div>
         </div>
 
@@ -1156,7 +1156,7 @@ export function ExpensesPayrollView({
           <div className="text-lg sm:text-xl font-bold font-mono text-amber-800 mt-1">
             {formatEGP(monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions)}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">
+          <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
             سلف: {formatEGP(monthPayrollSummary.totalAdvances)} • خصومات: {formatEGP(monthPayrollSummary.totalDeductions)}
           </div>
         </div>
@@ -1174,6 +1174,11 @@ export function ExpensesPayrollView({
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
             {monthPayrollSummary.unpaidCount} موظف بانتظار الصرف
+            {(monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions) > 0 && (
+              <span className="text-amber-700 font-mono text-[10px] block sm:inline sm:mr-1">
+                (صافي بعد خصم {formatEGP(monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions)} استقطاعات)
+              </span>
+            )}
           </div>
         </div>
 
