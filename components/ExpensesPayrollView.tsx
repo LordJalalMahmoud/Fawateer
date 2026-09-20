@@ -39,6 +39,7 @@ import {
   ArrowDownRight,
   ShieldCheck,
   ChevronDown,
+  ChevronUp,
   Percent,
   Crown,
   HandCoins,
@@ -49,7 +50,8 @@ import {
   Sparkles,
   Check,
   CalendarDays,
-  UserX
+  UserX,
+  Layers
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -65,6 +67,22 @@ import {
 } from '@/lib/types';
 import { getMonthlyCommissionsOverview, getEmployeeCommissionStats } from '@/lib/commission-analytics';
 import { MonthPicker } from '@/components/MonthPicker';
+
+export interface GroupedExpenseItem {
+  key: string;
+  title: string;
+  category: ExpenseCategory;
+  primaryOffice: string;
+  offices: string[];
+  totalAmount: number;
+  count: number;
+  latestDate: string;
+  earliestDate: string;
+  paymentMethods: PaymentMethod[];
+  recipients: string[];
+  receiptNumbers: string[];
+  items: ExpenseItem[];
+}
 
 export const DEFAULT_OFFICES = [
   'المكتب الرئيسي',
@@ -213,6 +231,17 @@ export function ExpensesPayrollView({
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // View mode for expenses (Grouped by item/month [Default] vs Detailed individual movements)
+  const [expenseViewMode, setExpenseViewMode] = useState<'GROUPED' | 'DETAILED'>('GROUPED');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroupExpand = (groupKey: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
 
   // Partner / Profit Drawings State (مهجة & حاتم / الشركاء)
   const [selectedPartnerTab, setSelectedPartnerTab] = useState<string>('مهجة');
@@ -373,6 +402,78 @@ export function ExpensesPayrollView({
 
   const filteredTotalAmount = useMemo(() => {
     return filteredExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [filteredExpenses]);
+
+  // Distinct expense titles across all expenses for suggestions
+  const distinctExpenseTitles = useMemo(() => {
+    const set = new Set<string>();
+    expenses.forEach(e => {
+      if (e.title && e.title.trim()) {
+        set.add(e.title.trim());
+      }
+    });
+    return Array.from(set);
+  }, [expenses]);
+
+  // Grouped Expenses by Item / Title for the current filter view (Month & Filters)
+  const groupedExpenses = useMemo<GroupedExpenseItem[]>(() => {
+    const map: Record<string, GroupedExpenseItem> = {};
+
+    filteredExpenses.forEach(exp => {
+      const rawTitle = (exp.title || '').trim();
+      if (!rawTitle) return;
+      const groupKey = rawTitle.replace(/\s+/g, ' ').toLowerCase();
+
+      if (!map[groupKey]) {
+        map[groupKey] = {
+          key: groupKey,
+          title: rawTitle,
+          category: exp.category,
+          primaryOffice: exp.office || 'المكتب الرئيسي',
+          offices: [exp.office || 'المكتب الرئيسي'],
+          totalAmount: 0,
+          count: 0,
+          latestDate: exp.date,
+          earliestDate: exp.date,
+          paymentMethods: [exp.paymentMethod],
+          recipients: exp.recipient ? [exp.recipient] : [],
+          receiptNumbers: exp.receiptNumber ? [exp.receiptNumber] : [],
+          items: [],
+        };
+      }
+
+      const grp = map[groupKey];
+      grp.totalAmount += Number(exp.amount || 0);
+      grp.count += 1;
+      grp.items.push(exp);
+
+      const off = exp.office || 'المكتب الرئيسي';
+      if (!grp.offices.includes(off)) {
+        grp.offices.push(off);
+      }
+      if (!grp.paymentMethods.includes(exp.paymentMethod)) {
+        grp.paymentMethods.push(exp.paymentMethod);
+      }
+      if (exp.recipient && !grp.recipients.includes(exp.recipient)) {
+        grp.recipients.push(exp.recipient);
+      }
+      if (exp.receiptNumber && !grp.receiptNumbers.includes(exp.receiptNumber)) {
+        grp.receiptNumbers.push(exp.receiptNumber);
+      }
+      if (exp.date > grp.latestDate) {
+        grp.latestDate = exp.date;
+        grp.category = exp.category;
+        grp.title = rawTitle;
+      }
+      if (exp.date < grp.earliestDate) {
+        grp.earliestDate = exp.date;
+      }
+    });
+
+    return Object.values(map).map(grp => {
+      grp.items.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+      return grp;
+    }).sort((a, b) => b.totalAmount - a.totalAmount);
   }, [filteredExpenses]);
 
   // Office Monthly Breakdown
@@ -615,20 +716,36 @@ export function ExpensesPayrollView({
   }, [monthPayrollData]);
 
   // Handlers: Open New Expense
-  const handleOpenNewExpense = (presetCategory?: ExpenseCategory) => {
+  const handleOpenNewExpense = (presetCategory?: ExpenseCategory, presetTitle?: string, presetOffice?: string) => {
     setEditingExpense(null);
-    setExpTitle('');
+    setExpTitle(presetTitle || '');
     setExpAmount('');
     setExpCategory(presetCategory || 'OTHER');
     setExpPaymentMethod('CASH');
     setExpDate(new Date().toISOString().slice(0, 10));
     setExpRecipient('');
     setExpReceiptNumber('');
-    setExpOffice(selectedOfficeFilter !== 'ALL' ? selectedOfficeFilter : 'المكتب الرئيسي');
+    setExpOffice(presetOffice || (selectedOfficeFilter !== 'ALL' ? selectedOfficeFilter : 'المكتب الرئيسي'));
     setExpPartnerName(selectedPartnerTab === 'ALL' ? 'مهجة' : selectedPartnerTab);
     setExpNotes('');
     setIsExpenseFormOpen(true);
   };
+
+  // Existing expenses in same month for the current title being typed in modal
+  const existingSameMonthExpenses = useMemo(() => {
+    if (!expTitle.trim()) return [];
+    const targetMonth = expDate ? expDate.slice(0, 7) : selectedExpenseMonth;
+    const targetTitle = expTitle.trim().toLowerCase();
+    return expenses.filter(e => 
+      e.date.startsWith(targetMonth) && 
+      e.title.trim().toLowerCase() === targetTitle &&
+      e.id !== editingExpense?.id
+    );
+  }, [expenses, expTitle, expDate, selectedExpenseMonth, editingExpense]);
+
+  const existingMonthSum = useMemo(() => {
+    return existingSameMonthExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  }, [existingSameMonthExpenses]);
 
   const handleOpenEditExpense = (expense: ExpenseItem) => {
     setEditingExpense(expense);
@@ -855,6 +972,32 @@ export function ExpensesPayrollView({
   // CSV Exports
   const handleExportExpensesCSV = () => {
     if (filteredExpenses.length === 0) return;
+
+    if (expenseViewMode === 'GROUPED') {
+      const headers = ['بند المصروف', 'التصنيف', 'المكتب / الفرع', 'عدد الحركات', 'أول تاريخ صرف', 'آخر تاريخ صرف', 'طرق الدفع', 'المستلمون', 'إجمالي المبلغ المنصرف'];
+      const rows = groupedExpenses.map(g => [
+        `"${(g.title || '').replace(/"/g, '""')}"`,
+        `"${CATEGORY_CONFIG[g.category]?.label || g.category}"`,
+        `"${g.offices.join(' - ').replace(/"/g, '""')}"`,
+        g.count,
+        g.earliestDate,
+        g.latestDate,
+        `"${g.paymentMethods.map(m => PAYMENT_METHOD_LABELS[m]?.label || m).join(' - ')}"`,
+        `"${g.recipients.join(' - ').replace(/"/g, '""')}"`,
+        g.totalAmount,
+      ]);
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `المصروفات_المجمعة_${selectedExpenseMonth}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+
     const headers = ['المعرف', 'التاريخ', 'البند / البيان', 'المبلغ', 'المكتب / الفرع', 'التصنيف', 'طريقة الدفع', 'المستلم', 'رقم الإيصال', 'ملاحظات'];
     const rows = filteredExpenses.map(e => [
       e.id,
@@ -873,7 +1016,7 @@ export function ExpensesPayrollView({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `المصروفات_${selectedExpenseMonth}.csv`);
+    link.setAttribute('download', `المصروفات_التفصيلية_${selectedExpenseMonth}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -977,7 +1120,9 @@ export function ExpensesPayrollView({
             {formatEGP(filteredTotalAmount)}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
-            {filteredExpenses.length} حركة صرف مسجلة
+            {expenseViewMode === 'GROUPED'
+              ? `${groupedExpenses.length} بند مجمع (${filteredExpenses.length} حركة صرف)`
+              : `${filteredExpenses.length} حركة صرف مسجلة`}
           </div>
         </div>
 
@@ -1045,7 +1190,7 @@ export function ExpensesPayrollView({
             }`}
           >
             <TrendingDown className="w-4 h-4 text-rose-400" />
-            <span>سجل المصروفات العامة ({filteredExpenses.length})</span>
+            <span>سجل المصروفات العامة ({expenseViewMode === 'GROUPED' ? groupedExpenses.length : filteredExpenses.length})</span>
           </button>
 
           <button
@@ -1127,6 +1272,65 @@ export function ExpensesPayrollView({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* View Mode Toggle: Grouped (Default) vs Detailed */}
+              <div className="inline-flex p-0.5 bg-slate-100 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setExpenseViewMode('GROUPED')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    expenseViewMode === 'GROUPED'
+                      ? 'bg-white text-rose-700 shadow-xs border border-rose-100'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="تجميع المصروفات الشهرية لنفس البند (مثال: 500 + 700 = 1,200 ج.م)"
+                >
+                  <PieChart className="w-3.5 h-3.5" />
+                  <span>عرض مجمع بالبند</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-50 text-rose-800 font-mono">
+                    {groupedExpenses.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExpenseViewMode('DETAILED')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    expenseViewMode === 'DETAILED'
+                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="عرض تفصيلي لكل حركة صرف على حدة"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>عرض تفصيلي</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700 font-mono">
+                    {filteredExpenses.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Expand / Collapse All for Grouped Mode */}
+              {expenseViewMode === 'GROUPED' && groupedExpenses.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allOpen = Object.values(expandedGroups).filter(Boolean).length === groupedExpenses.length;
+                    if (allOpen) {
+                      setExpandedGroups({});
+                    } else {
+                      const next: Record<string, boolean> = {};
+                      groupedExpenses.forEach(g => { next[g.key] = true; });
+                      setExpandedGroups(next);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 text-xs text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                  title="توسيع أو طي تفاصيل جميع البنود"
+                >
+                  {Object.values(expandedGroups).filter(Boolean).length === groupedExpenses.length
+                    ? 'طي تفاصيل الكل'
+                    : 'توسيع تفاصيل الكل'}
+                </button>
+              )}
+
               {/* Month Selector */}
               <MonthPicker
                 value={selectedExpenseMonth}
@@ -1185,7 +1389,238 @@ export function ExpensesPayrollView({
                   <span>تسجيل أول مصروف الآن</span>
                 </button>
               </div>
+            ) : expenseViewMode === 'GROUPED' ? (
+              /* Grouped Mode Table (المصروفات المجمعة شهرياً حسب البند) */
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4">بند المصروف (البيان)</th>
+                      <th className="py-3 px-4">التصنيف</th>
+                      <th className="py-3 px-4">المكتب / الفرع</th>
+                      <th className="py-3 px-4">فترة / آخر حركة</th>
+                      <th className="py-3 px-4">طرق الدفع</th>
+                      <th className="py-3 px-4">إجمالي المنصرف</th>
+                      <th className="py-3 px-4 text-center">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {groupedExpenses.map((grp) => {
+                      const catConfig = CATEGORY_CONFIG[grp.category] || CATEGORY_CONFIG.OTHER;
+                      const isExpanded = Boolean(expandedGroups[grp.key]);
+
+                      return (
+                        <React.Fragment key={grp.key}>
+                          <tr
+                            onClick={() => toggleGroupExpand(grp.key)}
+                            className={`cursor-pointer transition-colors ${
+                              isExpanded ? 'bg-rose-50/30' : 'hover:bg-slate-50/80'
+                            }`}
+                          >
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleGroupExpand(grp.key);
+                                  }}
+                                  className={`p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-transform ${
+                                    isExpanded ? 'rotate-180 text-rose-600' : ''
+                                  }`}
+                                  title={isExpanded ? 'طي التفاصيل' : 'عرض التفاصيل'}
+                                >
+                                  <ChevronDown className="w-4 h-4" />
+                                </button>
+                                <div>
+                                  <div className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-2">
+                                    <span>{grp.title}</span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+                                      grp.count > 1 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-slate-100 text-slate-600'
+                                    }`}>
+                                      {grp.count > 1 ? `${grp.count} حركات صرف` : 'حركة واحدة'}
+                                    </span>
+                                  </div>
+                                  {grp.recipients.length > 0 && (
+                                    <div className="text-[11px] text-slate-400 truncate max-w-xs mt-0.5">
+                                      الجهة: {grp.recipients.join('، ')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${catConfig.bg} ${catConfig.color} ${catConfig.border}`}>
+                                <span>{catConfig.label}</span>
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1">
+                                <Building2 className="w-3 h-3 text-slate-400" />
+                                <span>{grp.offices.length === 1 ? grp.offices[0] : `${grp.offices[0]} (+${grp.offices.length - 1})`}</span>
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap font-mono text-slate-600">
+                              {grp.count === 1 ? (
+                                <span>{grp.latestDate}</span>
+                              ) : (
+                                <div>
+                                  <span className="font-semibold text-slate-800">{grp.latestDate}</span>
+                                  <span className="text-[10px] text-slate-400 block">من {grp.earliestDate}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap text-slate-600">
+                              <div className="flex items-center gap-1 flex-wrap max-w-xs">
+                                {grp.paymentMethods.map(m => (
+                                  <span key={m} className="px-1.5 py-0.5 rounded-md bg-slate-100 text-[10px] font-medium text-slate-700">
+                                    {PAYMENT_METHOD_LABELS[m]?.label || m}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap font-mono font-black text-rose-700 text-sm sm:text-base">
+                              {formatEGP(grp.totalAmount)}
+                            </td>
+                            <td className="py-3 px-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGroupExpand(grp.key)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
+                                  title="عرض أو إخفاء حركات الصرف الفردية"
+                                >
+                                  <span>{isExpanded ? 'إخفاء' : `تفاصيل (${grp.count})`}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenNewExpense(grp.category, grp.title, grp.primaryOffice)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                                  title="إضافة حركة صرف جديدة لنفس هذا البند"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">صرف جديد</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Sub-movements Accordion */}
+                          {isExpanded && (
+                            <tr className="bg-slate-50/70 border-b border-slate-200">
+                              <td colSpan={7} className="p-3 sm:p-4">
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                                  <div className="p-3 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <Layers className="w-4 h-4 text-rose-600" />
+                                      <span className="font-bold text-slate-800">
+                                        حركات الصرف التفصيلية لبند &quot;{grp.title}&quot; ({formatArabicMonth(selectedExpenseMonth)})
+                                      </span>
+                                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 font-mono">
+                                        {grp.count} حركات
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs">
+                                      <span className="text-slate-500 font-mono">
+                                        الإجمالي المجمع: <strong className="text-rose-700 font-bold">{formatEGP(grp.totalAmount)}</strong>
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenNewExpense(grp.category, grp.title, grp.primaryOffice)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>إضافة حركة جديدة لهذا البند</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-right text-xs">
+                                      <thead className="bg-slate-100/60 text-slate-600 font-semibold border-b border-slate-200">
+                                        <tr>
+                                          <th className="py-2.5 px-3">#</th>
+                                          <th className="py-2.5 px-3">تاريخ الحركة</th>
+                                          <th className="py-2.5 px-3">المبلغ</th>
+                                          <th className="py-2.5 px-3">طريقة الدفع</th>
+                                          <th className="py-2.5 px-3">المكتب / الفرع</th>
+                                          <th className="py-2.5 px-3">المستلم / السند</th>
+                                          <th className="py-2.5 px-3">ملاحظات</th>
+                                          <th className="py-2.5 px-3 text-center">الإجراءات</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {grp.items.map((subExp, subIdx) => {
+                                          const methodConfig = PAYMENT_METHOD_LABELS[subExp.paymentMethod] || PAYMENT_METHOD_LABELS.CASH;
+                                          return (
+                                            <tr key={subExp.id} className="hover:bg-slate-50/80 transition-colors">
+                                              <td className="py-2 px-3 font-mono text-slate-400">
+                                                {subIdx + 1}
+                                              </td>
+                                              <td className="py-2 px-3 font-mono text-slate-700 whitespace-nowrap">
+                                                {subExp.date}
+                                              </td>
+                                              <td className="py-2 px-3 font-mono font-bold text-rose-700 whitespace-nowrap">
+                                                {formatEGP(subExp.amount)}
+                                              </td>
+                                              <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                                                {methodConfig.label}
+                                              </td>
+                                              <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                                                {subExp.office || 'المكتب الرئيسي'}
+                                              </td>
+                                              <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                                                {subExp.recipient || subExp.partnerName || '—'}
+                                                {subExp.receiptNumber && (
+                                                  <span className="text-[10px] text-slate-400 font-mono block">
+                                                    سند #{subExp.receiptNumber}
+                                                  </span>
+                                                )}
+                                              </td>
+                                              <td className="py-2 px-3 text-slate-500 max-w-xs truncate" title={subExp.notes}>
+                                                {subExp.notes || '—'}
+                                              </td>
+                                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleOpenEditExpense(subExp)}
+                                                    className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                                                    title="تعديل هذه الحركة"
+                                                  >
+                                                    <Edit2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      if (window.confirm(`هل أنت متأكد من حذف حركة الصرف بقيمة ${subExp.amount} ج.م بتاريخ ${subExp.date}؟`)) {
+                                                        onDeleteExpense(subExp.id);
+                                                      }
+                                                    }}
+                                                    className="p-1 text-rose-500 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                                    title="حذف هذه الحركة"
+                                                  >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
+              /* Detailed Mode Table (كل حركة على حدة) */
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
@@ -1273,7 +1708,15 @@ export function ExpensesPayrollView({
             {/* Table Footer */}
             <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600 gap-2 font-mono">
               <div>
-                عرض <strong>{filteredExpenses.length}</strong> حركة مصروف
+                {expenseViewMode === 'GROUPED' ? (
+                  <span>
+                    عرض <strong>{groupedExpenses.length}</strong> بند مجمع (بإجمالي <strong>{filteredExpenses.length}</strong> حركة صرف فردية)
+                  </span>
+                ) : (
+                  <span>
+                    عرض <strong>{filteredExpenses.length}</strong> حركة مصروف
+                  </span>
+                )}
               </div>
               <div>
                 إجمالي المصروفات المعروضة: <strong className="text-rose-700">{formatEGP(filteredTotalAmount)}</strong>
@@ -2044,11 +2487,27 @@ export function ExpensesPayrollView({
                 <input
                   type="text"
                   required
+                  list="expense-titles-list"
                   value={expTitle}
-                  onChange={e => setExpTitle(e.target.value)}
-                  placeholder="مثال: فاتورة كهرباء المخزن"
+                  onChange={e => {
+                    const val = e.target.value;
+                    setExpTitle(val);
+                    if (!editingExpense && val.trim()) {
+                      const matched = expenses.find(x => x.title.trim().toLowerCase() === val.trim().toLowerCase());
+                      if (matched) {
+                        if (matched.category) setExpCategory(matched.category);
+                        if (matched.office) setExpOffice(matched.office);
+                      }
+                    }
+                  }}
+                  placeholder="مثال: سوبر ماركت، كهرباء، صيانة..."
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white"
                 />
+                <datalist id="expense-titles-list">
+                  {distinctExpenseTitles.map(t => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2134,6 +2593,26 @@ export function ExpensesPayrollView({
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white"
                 />
               </div>
+
+              {/* Aggregation helper banner in form */}
+              {existingSameMonthExpenses.length > 0 && Number(expAmount) > 0 && !editingExpense && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <span>تجميع تلقائي خلال شهر ({expDate.slice(0, 7)}):</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-200 text-rose-900 font-mono">
+                        {existingSameMonthExpenses.length} حركة سابقة
+                      </span>
+                    </div>
+                    <div className="text-[11px] leading-relaxed text-rose-700">
+                      يوجد سابقاً لبند &quot;{expTitle}&quot; مصروفات مسجلة بقيمة <strong>{formatEGP(existingMonthSum)}</strong>.
+                      عند إضافة (<strong>{formatEGP(Number(expAmount))}</strong>)، سيتم تجميعها في الجدول والتقارير ليصبح الإجمالي: <strong className="text-rose-900 font-bold">{formatEGP(existingMonthSum + Number(expAmount))}</strong>.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
