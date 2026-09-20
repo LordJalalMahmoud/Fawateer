@@ -348,16 +348,18 @@ function InvoicesDashboard() {
 
   // Actions: Expenses
   const handleSaveExpense = async (expense: ExpenseItem) => {
-    const existingIndex = expenses.findIndex(e => e.id === expense.id);
-    let updated: ExpenseItem[];
-    if (existingIndex >= 0) {
-      updated = [...expenses];
-      updated[existingIndex] = expense;
-    } else {
-      updated = [expense, ...expenses];
-    }
-    setExpenses(updated);
-    saveStoredExpenses(updated);
+    setExpenses(prev => {
+      const existingIndex = prev.findIndex(e => e.id === expense.id);
+      let updated: ExpenseItem[];
+      if (existingIndex >= 0) {
+        updated = [...prev];
+        updated[existingIndex] = expense;
+      } else {
+        updated = [expense, ...prev];
+      }
+      saveStoredExpenses(updated);
+      return updated;
+    });
 
     try {
       await saveExpenseToFirestore(expense);
@@ -369,13 +371,43 @@ function InvoicesDashboard() {
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
-    const updated = expenses.filter(e => e.id !== expenseId);
-    setExpenses(updated);
-    saveStoredExpenses(updated);
+    let deletedExpense: ExpenseItem | undefined;
+    setExpenses(prev => {
+      deletedExpense = prev.find(e => e.id === expenseId);
+      const updated = prev.filter(e => e.id !== expenseId);
+      saveStoredExpenses(updated);
+      return updated;
+    });
+
+    // Two-way synchronization: If this expense is an employee advance or linked to an EmployeeTransaction, remove the transaction too!
+    let matchingTxIds: string[] = [];
+    setEmployeeTransactions(prev => {
+      const matching = prev.filter(t => 
+        t.expenseId === expenseId ||
+        t.id === expenseId ||
+        expenseId === `exp-adv-${t.id}` ||
+        expenseId.includes(t.id) ||
+        (deletedExpense && (deletedExpense.category === 'EMPLOYEE_ADVANCE' || deletedExpense.id.startsWith('exp-adv-')) &&
+          t.employeeId === deletedExpense.employeeId &&
+          Number(t.amount) === Number(deletedExpense.amount) &&
+          (t.salaryMonth === deletedExpense.salaryMonth || (deletedExpense.date && deletedExpense.date.startsWith(t.salaryMonth))))
+      );
+      matchingTxIds = matching.map(t => t.id);
+      if (matchingTxIds.length > 0) {
+        const updated = prev.filter(t => !matchingTxIds.includes(t.id));
+        saveStoredEmployeeTransactions(updated);
+        return updated;
+      }
+      return prev;
+    });
 
     try {
       await deleteExpenseFromFirestore(expenseId);
-      showToast('تم حذف بند المصروف', 'info');
+      // Synchronize deletion of linked transactions from Firestore as well
+      for (const txId of matchingTxIds) {
+        await deleteEmployeeTransactionFromFirestore(txId).catch(() => {});
+      }
+      showToast(matchingTxIds.length > 0 ? 'تم حذف بند المصروف وتحديث مستحقات الرواتب' : 'تم حذف بند المصروف', 'info');
     } catch (e: any) {
       console.warn('Firestore delete expense error:', e);
       showToast('تم الحذف محلياً', 'info');
@@ -384,16 +416,18 @@ function InvoicesDashboard() {
 
   // Actions: Employees
   const handleSaveEmployee = async (employee: Employee) => {
-    const existingIndex = employees.findIndex(emp => emp.id === employee.id);
-    let updated: Employee[];
-    if (existingIndex >= 0) {
-      updated = [...employees];
-      updated[existingIndex] = employee;
-    } else {
-      updated = [employee, ...employees];
-    }
-    setEmployees(updated);
-    saveStoredEmployees(updated);
+    setEmployees(prev => {
+      const existingIndex = prev.findIndex(emp => emp.id === employee.id);
+      let updated: Employee[];
+      if (existingIndex >= 0) {
+        updated = [...prev];
+        updated[existingIndex] = employee;
+      } else {
+        updated = [employee, ...prev];
+      }
+      saveStoredEmployees(updated);
+      return updated;
+    });
 
     try {
       await saveEmployeeToFirestore(employee);
@@ -405,9 +439,11 @@ function InvoicesDashboard() {
   };
 
   const handleDeleteEmployee = async (employeeId: string) => {
-    const updated = employees.filter(emp => emp.id !== employeeId);
-    setEmployees(updated);
-    saveStoredEmployees(updated);
+    setEmployees(prev => {
+      const updated = prev.filter(emp => emp.id !== employeeId);
+      saveStoredEmployees(updated);
+      return updated;
+    });
 
     try {
       await deleteEmployeeFromFirestore(employeeId);
@@ -508,21 +544,44 @@ function InvoicesDashboard() {
   };
 
   const handleDeleteEmployeeTransaction = async (txId: string) => {
-    const txToDelete = employeeTransactions.find(t => t.id === txId);
+    let txToDelete: EmployeeTransaction | undefined;
     setEmployeeTransactions(prev => {
+      txToDelete = prev.find(t => t.id === txId);
       const updated = prev.filter(t => t.id !== txId);
       saveStoredEmployeeTransactions(updated);
       return updated;
     });
 
-    // If there was an associated expense recorded in the treasury, remove it as well
-    if (txToDelete?.expenseId) {
-      await handleDeleteExpense(txToDelete.expenseId).catch(() => {});
-    }
+    // Associated expense ID or fallback convention
+    const targetExpenseId = txToDelete?.expenseId || `exp-adv-${txId}`;
+    let deletedExpenseIds: string[] = [];
+
+    // Remove matching expense from treasury expenses
+    setExpenses(prev => {
+      const matchingExpenses = prev.filter(e => 
+        e.id === targetExpenseId ||
+        e.id === `exp-adv-${txId}` ||
+        (txToDelete?.expenseId && e.id === txToDelete.expenseId) ||
+        (txToDelete && (e.category === 'EMPLOYEE_ADVANCE' || e.id.startsWith('exp-adv-')) &&
+          e.employeeId === txToDelete.employeeId &&
+          Number(e.amount) === Number(txToDelete.amount) &&
+          (e.salaryMonth === txToDelete.salaryMonth || (e.date && e.date.startsWith(txToDelete.salaryMonth))))
+      );
+      deletedExpenseIds = matchingExpenses.map(e => e.id);
+      if (deletedExpenseIds.length > 0) {
+        const updated = prev.filter(e => !deletedExpenseIds.includes(e.id));
+        saveStoredExpenses(updated);
+        return updated;
+      }
+      return prev;
+    });
 
     try {
       await deleteEmployeeTransactionFromFirestore(txId);
-      showToast('تم حذف الحركة بنجاح', 'info');
+      for (const expId of deletedExpenseIds) {
+        await deleteExpenseFromFirestore(expId).catch(() => {});
+      }
+      showToast('تم حذف الحركة بنجاح واستعادة مستحقات الرواتب', 'info');
     } catch (e: any) {
       console.warn('Firestore delete employee transaction error:', e);
       showToast('تم الحذف محلياً', 'info');
