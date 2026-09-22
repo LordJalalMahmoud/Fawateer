@@ -317,6 +317,9 @@ export function ExpensesPayrollView({
     transactions: EmployeeTransaction[];
   } | null>(null);
 
+  // Month Deductions & Advances Overview Modal (from KPI Card 3)
+  const [isMonthMovementsModalOpen, setIsMonthMovementsModalOpen] = useState(false);
+
   // Dialogs State
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(null);
@@ -1170,9 +1173,24 @@ export function ExpensesPayrollView({
         </div>
 
         {/* Active Movements (Advances & Deductions) */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs">
+        <div
+          onClick={() => (monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions > 0) && setIsMonthMovementsModalOpen(true)}
+          className={`bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs transition-all ${
+            (monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions > 0)
+              ? 'cursor-pointer hover:border-amber-400 hover:shadow-xs'
+              : ''
+          }`}
+          title="اضغط لعرض تفاصيل وحذف السلف والخصومات المسجلة لهذا الشهر"
+        >
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="font-semibold">سلف وخصومات ({formatArabicMonth(selectedPayrollMonth)})</span>
+            <span className="font-semibold flex items-center gap-1.5">
+              <span>سلف وخصومات ({formatArabicMonth(selectedPayrollMonth)})</span>
+              {(monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions > 0) && (
+                <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full font-bold font-sans">
+                  تفاصيل 🔍
+                </span>
+              )}
+            </span>
             <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
               <HandCoins className="w-3.5 h-3.5" />
             </div>
@@ -3590,6 +3608,136 @@ export function ExpensesPayrollView({
                 <button
                   type="button"
                   onClick={() => setSelectedEmpTxModal(null)}
+                  className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Modal: Inspect All Month Deductions & Advances from KPI Card */}
+      {isMonthMovementsModalOpen && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden" dir="rtl">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-amber-50">
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold">
+                  <HandCoins className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    سجل استقطاعات وسلف شهر ({formatArabicMonth(selectedPayrollMonth)})
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    إجمالي المستقطع: <strong className="font-mono text-amber-800">{formatEGP(monthPayrollSummary.totalAdvances + monthPayrollSummary.totalDeductions)}</strong> • يمكنك حذف أي حركة لاسترجاع الراتب فوراً
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMonthMovementsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {(() => {
+                const txList = (employeeTransactions || []).filter(
+                  t => t.salaryMonth === selectedPayrollMonth || t.date.startsWith(selectedPayrollMonth)
+                );
+                if (txList.length === 0) {
+                  return (
+                    <div className="text-center py-6 text-slate-400 text-xs">
+                      لا توجد استقطاعات أو سلف مسجلة لهذا الشهر
+                    </div>
+                  );
+                }
+                return (
+                  <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                    {txList.map(tx => (
+                      <div key={tx.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{tx.employeeName}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              tx.type === 'ADVANCE' ? 'bg-rose-100 text-rose-700' :
+                              tx.type === 'DEDUCTION' ? 'bg-red-100 text-red-700' :
+                              'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              {tx.type === 'ADVANCE' ? 'سلفة' : tx.type === 'DEDUCTION' ? 'خصم / جزاء' : 'مكافأة'}
+                            </span>
+                            <span className={`font-mono font-bold ${
+                              tx.type === 'ADVANCE' ? 'text-rose-700' :
+                              tx.type === 'DEDUCTION' ? 'text-red-700' :
+                              'text-emerald-700'
+                            }`}>
+                              {tx.type === 'BONUS' ? '+' : '-'}{formatEGP(tx.amount)}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
+                            <span>{tx.title || 'بدون عنوان'}</span>
+                            <span>•</span>
+                            <span>{tx.date}</span>
+                            {tx.notes && (
+                              <>
+                                <span>•</span>
+                                <span className="truncate">{tx.notes}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (window.confirm(`هل أنت متأكد من حذف حركة (${tx.title || 'حركة'}) للموظف (${tx.employeeName}) بقيمة ${tx.amount} ج.م؟ سيتم استعادة المبلغ للرواتب المتبقية فوراً.`)) {
+                              if (onDeleteEmployeeTransaction) {
+                                await onDeleteEmployeeTransaction(tx.id);
+                              }
+                            }
+                          }}
+                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                          title="حذف واسترجاع الراتب"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const txList = (employeeTransactions || []).filter(
+                      t => t.salaryMonth === selectedPayrollMonth || t.date.startsWith(selectedPayrollMonth)
+                    );
+                    if (txList.length === 0) return;
+                    if (window.confirm(`هل أنت متأكد من تصفير وحذف جميع الاستقطاعات والسلف لشهر (${formatArabicMonth(selectedPayrollMonth)}) وعددها ${txList.length} حركة؟ ستعود الرواتب المتبقية لقيمتها الكاملة فوراً.`)) {
+                      if (onDeleteEmployeeTransaction) {
+                        for (const tx of txList) {
+                          await onDeleteEmployeeTransaction(tx.id);
+                        }
+                      }
+                      setIsMonthMovementsModalOpen(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs cursor-pointer flex items-center gap-1 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>تصفير جميع استقطاعات هذا الشهر</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMonthMovementsModalOpen(false)}
                   className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
                 >
                   إغلاق

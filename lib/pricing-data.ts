@@ -293,18 +293,43 @@ export function calculateCourierSettlementProfit(
   settlement: CourierSettlement, 
   tiers: ProductPricingTier[]
 ): CourierProfitBreakdown {
-  const totalRetailValue = Number(settlement.totalOrderValue) || 
-    (settlement.items || []).reduce((sum, it) => sum + (Number(it.quantity) * Number(it.retailUnitPrice)), 0);
   const collectedCash = Number(settlement.collectedCash) || 0;
   const shippingFeeDeducted = Number(settlement.shippingFeeDeducted) || 0;
   const netCashReceived = Number(settlement.netCashReceived ?? Math.max(0, collectedCash - shippingFeeDeducted));
+  const hasItems = Array.isArray(settlement.items) && settlement.items.length > 0;
+
+  // Case 1: Pure financial collection without mentioning products
+  if (!hasItems) {
+    const totalRetailValue = Number(settlement.totalOrderValue) || collectedCash;
+    return {
+      settlementId: settlement.id,
+      courierName: settlement.courierName || 'شركة الشحن',
+      manifestNumber: settlement.manifestNumber || 'كشف بدون رقم',
+      date: settlement.date,
+      collectedCash,
+      shippingFeeDeducted,
+      netCashReceived,
+      totalRetailValue,
+      totalFactoryCost: 0,
+      totalCompanyCost: 0,
+      paidRatio: 1,
+      realizedCompanyProfit: netCashReceived,
+      realizedFactoryProfit: 0,
+      realizedTotalProfit: netCashReceived,
+      items: [],
+    };
+  }
+
+  // Case 2: Collection with explicit product breakdown
+  const totalRetailValue = Number(settlement.totalOrderValue) || 
+    settlement.items!.reduce((sum, it) => sum + (Number(it.quantity) * Number(it.retailUnitPrice)), 0);
 
   let paidRatio = 1;
   if (totalRetailValue > 0) {
     paidRatio = Math.min(1, Math.max(0, collectedCash / totalRetailValue));
   }
 
-  const itemsCalculations: CourierItemProfitCalculation[] = (settlement.items || []).map(it => {
+  const itemsCalculations: CourierItemProfitCalculation[] = settlement.items!.map(it => {
     const tier = findPricingTier(it.productName, tiers);
     const qty = Number(it.quantity) || 0;
     const retailUnitPrice = Number(it.retailUnitPrice) || 0;

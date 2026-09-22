@@ -58,6 +58,14 @@ const COMMON_COURIERS = [
   'ميدل إيست Middle East',
 ];
 
+export const COURIER_PAYMENT_METHODS = [
+  { id: 'INSTAPAY', label: 'إنستاباي InstaPay' },
+  { id: 'CASH', label: 'كاش نقدي' },
+  { id: 'BANK_TRANSFER', label: 'تحويل بنكي' },
+  { id: 'VODAFONE_CASH', label: 'فودافون كاش' },
+  { id: 'CHECK', label: 'شيك' },
+];
+
 export function CourierSettlementsModal({
   isOpen,
   onClose,
@@ -84,15 +92,15 @@ export function CourierSettlementsModal({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSettlement, setEditingSettlement] = useState<CourierSettlement | null>(null);
 
-  // Form Fields
+  // Form Fields (تحصيل مالي مباشر)
   const [formCourierName, setFormCourierName] = useState('بوسطة Bosta');
   const [formCustomCourier, setFormCustomCourier] = useState('');
   const [formManifestNumber, setFormManifestNumber] = useState('');
   const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10));
   const [formCollectedCash, setFormCollectedCash] = useState<number | ''>('');
   const [formShippingFee, setFormShippingFee] = useState<number | ''>('');
+  const [formPaymentMethod, setFormPaymentMethod] = useState('INSTAPAY');
   const [formNotes, setFormNotes] = useState('');
-  const [formItems, setFormItems] = useState<RetailSoldItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -139,41 +147,39 @@ export function CourierSettlementsModal({
         const query = searchQuery.toLowerCase().trim();
         const matchCourier = cb.courierName.toLowerCase().includes(query);
         const matchManifest = cb.manifestNumber.toLowerCase().includes(query);
+        const raw = courierSettlements.find(s => s.id === cb.settlementId);
+        const matchNotes = (raw?.notes || '').toLowerCase().includes(query);
+        const matchMethod = (raw?.paymentMethod || '').toLowerCase().includes(query);
         const matchItems = cb.items.some(it => it.productName.toLowerCase().includes(query));
-        if (!matchCourier && !matchManifest && !matchItems) return false;
+        if (!matchCourier && !matchManifest && !matchNotes && !matchMethod && !matchItems) return false;
       }
       return true;
     });
-  }, [calculatedSettlements, courierFilter, dateFilter, customStartDate, customEndDate, searchQuery]);
+  }, [calculatedSettlements, courierFilter, dateFilter, customStartDate, customEndDate, searchQuery, courierSettlements]);
 
   // Aggregate KPI Metrics
   const summaryMetrics = useMemo(() => {
     const totalCollected = filteredCalculations.reduce((sum, s) => sum + s.collectedCash, 0);
-    const totalRetail = filteredCalculations.reduce((sum, s) => sum + s.totalRetailValue, 0);
     const totalShippingFees = filteredCalculations.reduce((sum, s) => sum + s.shippingFeeDeducted, 0);
     const totalNetReceived = filteredCalculations.reduce((sum, s) => sum + s.netCashReceived, 0);
-    const totalFactoryCost = filteredCalculations.reduce((sum, s) => sum + s.totalFactoryCost, 0);
-    const totalCompanyCost = filteredCalculations.reduce((sum, s) => sum + s.totalCompanyCost, 0);
-
+    const totalRetail = filteredCalculations.reduce((sum, s) => sum + s.totalRetailValue, 0);
     const totalCompanyProfit = filteredCalculations.reduce((sum, s) => sum + s.realizedCompanyProfit, 0);
     const totalFactoryProfit = filteredCalculations.reduce((sum, s) => sum + s.realizedFactoryProfit, 0);
     const totalNetProfit = filteredCalculations.reduce((sum, s) => sum + s.realizedTotalProfit, 0);
 
     const count = filteredCalculations.length;
-    const collectionRate = totalRetail > 0 ? (totalCollected / totalRetail) * 100 : 100;
+    const avgCollection = count > 0 ? totalCollected / count : 0;
 
     return {
       count,
       totalCollected,
-      totalRetail,
       totalShippingFees,
       totalNetReceived,
-      totalFactoryCost,
-      totalCompanyCost,
+      totalRetail,
       totalCompanyProfit,
       totalFactoryProfit,
       totalNetProfit,
-      collectionRate,
+      avgCollection,
     };
   }, [filteredCalculations]);
 
@@ -227,7 +233,7 @@ export function CourierSettlementsModal({
     return Array.from(map.values()).sort((a, b) => b.realizedNetProfit - a.realizedNetProfit);
   }, [filteredCalculations]);
 
-  // Handle Opening Form for New Settlement
+  // Handle Opening Form for New Settlement (تحصيل مالي فقط)
   const handleOpenNewForm = () => {
     setEditingSettlement(null);
     setFormCourierName('بوسطة Bosta');
@@ -236,21 +242,8 @@ export function CourierSettlementsModal({
     setFormDate(new Date().toISOString().slice(0, 10));
     setFormCollectedCash('');
     setFormShippingFee('');
+    setFormPaymentMethod('INSTAPAY');
     setFormNotes('');
-    
-    // Start with 1 empty item
-    const firstProd = products[0]?.name || 'GC المزيل الشامل';
-    setFormItems([
-      {
-        id: 'item-new-1',
-        productName: firstProd,
-        quantity: 1,
-        unit: 'قطعة',
-        retailUnitPrice: 100,
-        totalAmount: 100,
-        piecesPerCarton: 12,
-      }
-    ]);
     setFormError('');
     setIsFormOpen(true);
   };
@@ -270,84 +263,18 @@ export function CourierSettlementsModal({
     setFormDate(settlement.date || new Date().toISOString().slice(0, 10));
     setFormCollectedCash(settlement.collectedCash);
     setFormShippingFee(settlement.shippingFeeDeducted || '');
+    setFormPaymentMethod(settlement.paymentMethod || 'INSTAPAY');
     setFormNotes(settlement.notes || '');
-    setFormItems(settlement.items && settlement.items.length > 0 ? settlement.items : [
-      {
-        id: `item-${settlement.id}-1`,
-        productName: products[0]?.name || 'GC المزيل الشامل',
-        quantity: 1,
-        unit: 'قطعة',
-        retailUnitPrice: 100,
-        totalAmount: 100,
-        piecesPerCarton: 12,
-      }
-    ]);
     setFormError('');
     setIsFormOpen(true);
   };
 
-  // Add Item in Form
-  const handleAddItemToForm = () => {
-    const defaultName = products[0]?.name || 'GC المزيل الشامل';
-    setFormItems(prev => [
-      ...prev,
-      {
-        id: `item-${prev.length + 1}`,
-        productName: defaultName,
-        quantity: 1,
-        unit: 'قطعة',
-        retailUnitPrice: 100,
-        totalAmount: 100,
-        piecesPerCarton: 12,
-      }
-    ]);
-  };
-
-  // Remove Item in Form
-  const handleRemoveItemFromForm = (index: number) => {
-    setFormItems(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // Update Item in Form
-  const handleUpdateItemInForm = (index: number, field: keyof RetailSoldItem, value: any) => {
-    setFormItems(prev => {
-      const copy = [...prev];
-      const target = { ...copy[index], [field]: value };
-      
-      if (field === 'quantity' || field === 'retailUnitPrice') {
-        const q = Number(target.quantity) || 0;
-        const p = Number(target.retailUnitPrice) || 0;
-        target.totalAmount = Number((q * p).toFixed(2));
-      }
-      
-      copy[index] = target;
-      return copy;
-    });
-  };
-
-  // Live total order value in form
-  const formTotalOrderValue = useMemo(() => {
-    return formItems.reduce((sum, it) => sum + (Number(it.quantity) * Number(it.retailUnitPrice)), 0);
-  }, [formItems]);
-
-  // Live estimated profit in form
-  const formLiveProfit = useMemo(() => {
-    const dummySettlement: CourierSettlement = {
-      id: 'preview',
-      courierName: formCourierName === 'أخرى' ? formCustomCourier : formCourierName,
-      manifestNumber: formManifestNumber,
-      date: formDate,
-      collectedCash: Number(formCollectedCash) || formTotalOrderValue,
-      shippingFeeDeducted: Number(formShippingFee) || 0,
-      totalOrderValue: formTotalOrderValue,
-      netCashReceived: (Number(formCollectedCash) || formTotalOrderValue) - (Number(formShippingFee) || 0),
-      items: formItems,
-      createdAt: '',
-      updatedAt: '',
-      status: 'COMPLETED',
-    };
-    return calculateCourierSettlementProfit(dummySettlement, pricingTiers);
-  }, [formCourierName, formCustomCourier, formManifestNumber, formDate, formCollectedCash, formShippingFee, formTotalOrderValue, formItems, pricingTiers]);
+  // Live net calculation in form
+  const formNetReceived = useMemo(() => {
+    const col = Number(formCollectedCash) || 0;
+    const fee = Number(formShippingFee) || 0;
+    return Math.max(0, col - fee);
+  }, [formCollectedCash, formShippingFee]);
 
   // Save Settlement Form Submission
   const handleSaveForm = async (e: React.FormEvent) => {
@@ -360,22 +287,9 @@ export function CourierSettlementsModal({
       return;
     }
 
-    if (formItems.length === 0) {
-      setFormError('يرجى إضافة صنف واحد على الأقل مباع في هذه الشحنة');
-      return;
-    }
-
-    for (let i = 0; i < formItems.length; i++) {
-      const it = formItems[i];
-      if (!it.productName || Number(it.quantity) <= 0 || Number(it.retailUnitPrice) <= 0) {
-        setFormError(`يرجى التأكد من اسم الصنف، الكمية، وسعر البيع في السطر رقم (${i + 1})`);
-        return;
-      }
-    }
-
     const collectedNum = Number(formCollectedCash);
-    if (isNaN(collectedNum) || collectedNum < 0) {
-      setFormError('يرجى إدخال المبلغ المحصل الفعلي من شركة الشحن (الكاش المقبوض)');
+    if (isNaN(collectedNum) || collectedNum <= 0) {
+      setFormError('يرجى إدخال المبلغ المحصل من شركة الشحن (قيمة أكبر من صفر)');
       return;
     }
 
@@ -391,11 +305,12 @@ export function CourierSettlementsModal({
         date: formDate || new Date().toISOString().slice(0, 10),
         collectedCash: collectedNum,
         shippingFeeDeducted: shippingFeeNum,
-        totalOrderValue: formTotalOrderValue,
+        totalOrderValue: collectedNum,
         netCashReceived: netReceived,
-        items: formItems,
+        paymentMethod: formPaymentMethod,
+        items: editingSettlement?.items || [],
         notes: formNotes.trim(),
-        status: collectedNum >= formTotalOrderValue ? 'COMPLETED' : collectedNum > 0 ? 'PARTIAL' : 'PENDING',
+        status: 'COMPLETED',
         createdAt: editingSettlement ? editingSettlement.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -417,37 +332,35 @@ export function CourierSettlementsModal({
     const headers = [
       'التاريخ',
       'شركة الشحن',
-      'رقم الكشف / البوليصة',
-      'قيمة البضاعة المباعة (ج.م)',
+      'رقم الكشف / الحوالة',
+      'طريقة الاستلام',
       'المبلغ المحصل كاش (ج.م)',
       'مصاريف الشحن (ج.م)',
       'صافي الكاش المستلم (ج.م)',
-      'ربح الشركة المحصل (ج.م)',
-      'ربح المصنع المحصل (ج.م)',
-      'صافي الربح الفعلي (ج.م)',
-      'عدد الأصناف',
+      'ملاحظات',
     ];
 
-    const rows = filteredCalculations.map(s => [
-      s.date,
-      `"${s.courierName.replace(/"/g, '""')}"`,
-      `"${s.manifestNumber.replace(/"/g, '""')}"`,
-      s.totalRetailValue,
-      s.collectedCash,
-      s.shippingFeeDeducted,
-      s.netCashReceived,
-      s.realizedCompanyProfit,
-      s.realizedFactoryProfit,
-      s.realizedTotalProfit,
-      s.items.length,
-    ]);
+    const rows = filteredCalculations.map(s => {
+      const raw = courierSettlements.find(item => item.id === s.settlementId);
+      const methodLabel = COURIER_PAYMENT_METHODS.find(m => m.id === raw?.paymentMethod)?.label || raw?.paymentMethod || 'نقدي';
+      return [
+        s.date,
+        `"${s.courierName.replace(/"/g, '""')}"`,
+        `"${s.manifestNumber.replace(/"/g, '""')}"`,
+        `"${methodLabel}"`,
+        s.collectedCash,
+        s.shippingFeeDeducted,
+        s.netCashReceived,
+        `"${(raw?.notes || '').replace(/"/g, '""')}"`,
+      ];
+    });
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `كشف_تحصيلات_الشحن_والقطاعي_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `كشف_تحصيلات_شركات_الشحن_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -467,14 +380,14 @@ export function CourierSettlementsModal({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                  تحصيلات شركات الشحن والبيع القطاعي
+                  تحصيلات شركات الشحن والمندوبين
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  RETAIL & COURIER
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  COURIER COLLECTIONS
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                تسجيل الفلوس المقبوضة من شركات الشحن، وحساب أرباح الشركة والمصنع من البيع القطاعي
+                تسجيل الفلوس والمبالغ المحصلة من شركات الشحن (بوسطة، شيب بلو، أوتو...) وإيداعها في الخزينة
               </p>
             </div>
           </div>
@@ -482,7 +395,7 @@ export function CourierSettlementsModal({
           <div className="flex items-center gap-2.5">
             <button
               onClick={handleOpenNewForm}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>تسجيل تحصيل شحن جديد</span>
@@ -513,17 +426,19 @@ export function CourierSettlementsModal({
               <span>كشف دفعات وتحصيلات الشحن ({filteredCalculations.length})</span>
             </button>
 
-            <button
-              onClick={() => setActiveTab('PRODUCTS_ANALYSIS')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'PRODUCTS_ANALYSIS'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>تحليل أرباح الأصناف المباعة قطاعي ({productsAnalysis.length})</span>
-            </button>
+            {productsAnalysis.length > 0 && (
+              <button
+                onClick={() => setActiveTab('PRODUCTS_ANALYSIS')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                  activeTab === 'PRODUCTS_ANALYSIS'
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Package className="w-4 h-4" />
+                <span>تحليل أصناف سابقة ({productsAnalysis.length})</span>
+              </button>
+            )}
           </div>
 
           {/* Quick Export and Print */}
@@ -548,7 +463,7 @@ export function CourierSettlementsModal({
             {/* 1. Collected Cash from Courier */}
             <div className="bg-slate-950/80 border border-emerald-500/30 rounded-2xl p-4 flex flex-col justify-between shadow-lg shadow-emerald-950/20">
               <div className="flex items-center justify-between text-emerald-400 mb-1">
-                <span className="text-[11px] font-bold">الفلوس المقبوضة كاش</span>
+                <span className="text-[11px] font-bold">إجمالي المحصل كاش</span>
                 <DollarSign className="w-4 h-4" />
               </div>
               <div>
@@ -560,25 +475,10 @@ export function CourierSettlementsModal({
               <span className="text-[10px] text-slate-500 mt-1">من شركات الشحن</span>
             </div>
 
-            {/* 2. Total Retail Goods Value */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-slate-400 mb-1">
-                <span className="text-[11px] font-bold">قيمة البضاعة المباعة</span>
-                <Package className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xl sm:text-2xl font-bold text-slate-200">
-                  {summaryMetrics.totalRetail.toLocaleString()}
-                </span>
-                <span className="text-xs text-slate-400 mr-1">ج.م</span>
-              </div>
-              <span className="text-[10px] text-slate-500 mt-1">إجمالي القطاعي</span>
-            </div>
-
-            {/* 3. Shipping Fees Deducted */}
+            {/* 2. Shipping Fees Deducted */}
             <div className="bg-slate-950/80 border border-rose-500/20 rounded-2xl p-4 flex flex-col justify-between">
               <div className="flex items-center justify-between text-rose-400 mb-1">
-                <span className="text-[11px] font-bold">مصاريف الشحن والعمولة</span>
+                <span className="text-[11px] font-bold">مصاريف وعمولة الشحن</span>
                 <Truck className="w-4 h-4" />
               </div>
               <div>
@@ -587,43 +487,58 @@ export function CourierSettlementsModal({
                 </span>
                 <span className="text-xs text-slate-400 mr-1">ج.م</span>
               </div>
-              <span className="text-[10px] text-slate-500 mt-1">مخصومة من شركات الشحن</span>
+              <span className="text-[10px] text-slate-500 mt-1">مخصومة من كشوف الشحن</span>
             </div>
 
-            {/* 4. Company Realized Profit */}
-            <div className="bg-slate-950/80 border border-teal-500/30 rounded-2xl p-4 flex flex-col justify-between">
+            {/* 3. Net Cash in Treasury */}
+            <div className="bg-slate-950/80 border border-teal-500/30 rounded-2xl p-4 flex flex-col justify-between shadow-lg shadow-teal-950/20">
               <div className="flex items-center justify-between text-teal-400 mb-1">
-                <span className="text-[11px] font-bold">أرباح الشركة (قطاعي)</span>
+                <span className="text-[11px] font-bold">صافي المقبوض في الخزينة</span>
                 <Building2 className="w-4 h-4" />
               </div>
               <div>
                 <span className="text-xl sm:text-2xl font-black text-teal-400">
-                  +{summaryMetrics.totalCompanyProfit.toLocaleString()}
+                  {summaryMetrics.totalNetReceived.toLocaleString()}
                 </span>
                 <span className="text-xs text-slate-400 mr-1">ج.م</span>
               </div>
-              <span className="text-[10px] text-teal-500/80 mt-1">المحصلة فعلياً كاش</span>
+              <span className="text-[10px] text-teal-500/80 mt-1">الصافي الفعلي المستلم</span>
             </div>
 
-            {/* 5. Factory Realized Profit */}
+            {/* 4. Settlements Count */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-400 mb-1">
+                <span className="text-[11px] font-bold">عدد الدفعات والكشوفات</span>
+                <Receipt className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xl sm:text-2xl font-bold text-white font-mono">
+                  {summaryMetrics.count}
+                </span>
+                <span className="text-xs text-slate-400 mr-1">دفعة</span>
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1">إجمالي الحركات</span>
+            </div>
+
+            {/* 5. Average Collection */}
             <div className="bg-slate-950/80 border border-blue-500/30 rounded-2xl p-4 flex flex-col justify-between">
               <div className="flex items-center justify-between text-blue-400 mb-1">
-                <span className="text-[11px] font-bold">أرباح المصنع (قطاعي)</span>
-                <Factory className="w-4 h-4" />
+                <span className="text-[11px] font-bold">متوسط الدفعة</span>
+                <TrendingUp className="w-4 h-4" />
               </div>
               <div>
                 <span className="text-xl sm:text-2xl font-black text-blue-400">
-                  +{summaryMetrics.totalFactoryProfit.toLocaleString()}
+                  {Math.round(summaryMetrics.avgCollection).toLocaleString()}
                 </span>
                 <span className="text-xs text-slate-400 mr-1">ج.م</span>
               </div>
-              <span className="text-[10px] text-blue-500/80 mt-1">المحصلة فعلياً كاش</span>
+              <span className="text-[10px] text-blue-500/80 mt-1">لكل كشف تحصيل</span>
             </div>
 
-            {/* 6. Net Profit in Pocket */}
+            {/* 6. Net Realized Profit */}
             <div className="bg-gradient-to-br from-amber-950/40 to-slate-950 border-2 border-amber-500/50 rounded-2xl p-4 flex flex-col justify-between shadow-xl shadow-amber-950/30">
               <div className="flex items-center justify-between text-amber-400 mb-1">
-                <span className="text-[11px] font-black">صافي الربح في الجيب</span>
+                <span className="text-[11px] font-black">صافي الأرباح المحققة</span>
                 <Sparkles className="w-4 h-4 text-amber-400" />
               </div>
               <div>
@@ -632,7 +547,7 @@ export function CourierSettlementsModal({
                 </span>
                 <span className="text-xs text-amber-400/80 mr-1">ج.م</span>
               </div>
-              <span className="text-[10px] text-amber-400/70 font-semibold mt-1">بعد خصم الشحن والمصنع</span>
+              <span className="text-[10px] text-amber-400/70 font-semibold mt-1">صافي أرباح الشحن</span>
             </div>
 
           </div>
@@ -721,11 +636,11 @@ export function CourierSettlementsModal({
                   <Truck className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                   <h3 className="text-base font-bold text-slate-300">لا توجد تحصيلات مسجلة لشركات الشحن حتى الآن</h3>
                   <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
-                    اضغط على زر «تسجيل تحصيل شحن جديد» بالأعلى لإضافة المبالغ المحصلة من شركات الشحن (بوسطة، أوتو، شيب بلو...) وحساب أرباح القطاعي فوراً.
+                    اضغط على زر «تسجيل تحصيل شحن جديد» بالأعلى لإضافة المبالغ والفلوس المحصلة من شركات الشحن (بوسطة، أوتو، شيب بلو...) وإيداعها مباشرة في الخزينة.
                   </p>
                   <button
                     onClick={handleOpenNewForm}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-emerald-600/30"
                   >
                     <Plus className="w-4 h-4" />
                     <span>إضافة أول تحصيل كاش</span>
@@ -738,14 +653,13 @@ export function CourierSettlementsModal({
                       <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 text-[11px] uppercase tracking-wider">
                         <tr>
                           <th className="py-3 px-4">التاريخ</th>
-                          <th className="py-3 px-4">شركة الشحن</th>
-                          <th className="py-3 px-4">رقم الكشف / البوليصة</th>
-                          <th className="py-3 px-4">قيمة البضاعة</th>
+                          <th className="py-3 px-4">شركة الشحن / المندوب</th>
+                          <th className="py-3 px-4">رقم الكشف / الحوالة</th>
+                          <th className="py-3 px-4">طريقة الاستلام</th>
                           <th className="py-3 px-4 text-emerald-400">المبلغ المحصل كاش</th>
                           <th className="py-3 px-4 text-rose-400">مصاريف الشحن</th>
-                          <th className="py-3 px-4 text-teal-400">ربح الشركة</th>
-                          <th className="py-3 px-4 text-blue-400">ربح المصنع</th>
-                          <th className="py-3 px-4 text-amber-400">صافي الربح الفعلي</th>
+                          <th className="py-3 px-4 text-amber-300">صافي المستلم في الخزينة</th>
+                          <th className="py-3 px-4">ملاحظات</th>
                           <th className="py-3 px-4 text-center">الإجراءات</th>
                         </tr>
                       </thead>
@@ -753,69 +667,66 @@ export function CourierSettlementsModal({
                         {filteredCalculations.map((cb) => {
                           const isExpanded = expandedSettlementId === cb.settlementId;
                           const rawSettlement = courierSettlements.find(s => s.id === cb.settlementId);
+                          const methodLabel = COURIER_PAYMENT_METHODS.find(m => m.id === rawSettlement?.paymentMethod)?.label || rawSettlement?.paymentMethod || 'نقدي';
 
                           return (
                             <React.Fragment key={cb.settlementId}>
                               <tr className="hover:bg-slate-900/50 transition-colors">
-                                <td className="py-3.5 px-4 font-mono text-slate-400 text-xs">
+                                <td className="py-3.5 px-4 font-mono text-slate-400 text-xs whitespace-nowrap">
                                   {cb.date}
                                 </td>
-                                <td className="py-3.5 px-4 font-bold text-white flex items-center gap-2">
-                                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                <td className="py-3.5 px-4 font-bold text-white flex items-center gap-2 whitespace-nowrap">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                                   {cb.courierName}
                                 </td>
-                                <td className="py-3.5 px-4 font-mono text-slate-300">
+                                <td className="py-3.5 px-4 font-mono text-slate-300 whitespace-nowrap">
                                   {cb.manifestNumber}
                                 </td>
-                                <td className="py-3.5 px-4 text-slate-300">
-                                  {cb.totalRetailValue.toLocaleString()} ج.م
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-slate-800 text-indigo-300 border border-slate-700">
+                                    {methodLabel}
+                                  </span>
                                 </td>
-                                <td className="py-3.5 px-4 font-black text-emerald-400">
-                                  {cb.collectedCash.toLocaleString()} ج.م
-                                  {cb.paidRatio < 0.99 && (
-                                    <span className="text-[10px] text-amber-400 block font-normal">
-                                      (تحصيل {Math.round(cb.paidRatio * 100)}%)
-                                    </span>
-                                  )}
+                                <td className="py-3.5 px-4 font-black text-emerald-400 font-mono whitespace-nowrap text-sm">
+                                  +{cb.collectedCash.toLocaleString()} ج.م
                                 </td>
-                                <td className="py-3.5 px-4 text-rose-400 font-semibold">
+                                <td className="py-3.5 px-4 text-rose-400 font-semibold font-mono whitespace-nowrap text-xs">
                                   {cb.shippingFeeDeducted > 0 ? `-${cb.shippingFeeDeducted.toLocaleString()} ج.م` : '0 ج.م'}
                                 </td>
-                                <td className="py-3.5 px-4 text-teal-400 font-bold">
-                                  +{cb.realizedCompanyProfit.toLocaleString()} ج.م
+                                <td className="py-3.5 px-4 font-black text-amber-300 bg-amber-950/20 font-mono whitespace-nowrap text-sm">
+                                  +{cb.netCashReceived.toLocaleString()} ج.م
                                 </td>
-                                <td className="py-3.5 px-4 text-blue-400 font-bold">
-                                  +{cb.realizedFactoryProfit.toLocaleString()} ج.م
+                                <td className="py-3.5 px-4 text-xs text-slate-400 max-w-[200px] truncate">
+                                  {rawSettlement?.notes || '—'}
                                 </td>
-                                <td className="py-3.5 px-4 font-black text-amber-300 bg-amber-950/10">
-                                  +{cb.realizedTotalProfit.toLocaleString()} ج.م
-                                </td>
-                                <td className="py-3.5 px-4 text-center">
+                                <td className="py-3.5 px-4 text-center whitespace-nowrap">
                                   <div className="flex items-center justify-center gap-1.5">
-                                    <button
-                                      onClick={() => setExpandedSettlementId(isExpanded ? null : cb.settlementId)}
-                                      className="p-1.5 text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                                      title="عرض تفاصيل الأصناف"
-                                    >
-                                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                    </button>
+                                    {cb.items && cb.items.length > 0 && (
+                                      <button
+                                        onClick={() => setExpandedSettlementId(isExpanded ? null : cb.settlementId)}
+                                        className="p-1.5 text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                        title="عرض الأصناف المسجلة سابقاً"
+                                      >
+                                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                      </button>
+                                    )}
                                     {rawSettlement && (
                                       <button
                                         onClick={() => handleOpenEditForm(rawSettlement)}
                                         className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                                        title="تعديل الكشف"
+                                        title="تعديل التحصيل"
                                       >
                                         <Edit3 className="w-4 h-4" />
                                       </button>
                                     )}
                                     <button
                                       onClick={() => {
-                                        if (confirm(`هل أنت متأكد من حذف كشف التحصيل الخاص بشركة (${cb.courierName})؟`)) {
+                                        if (confirm(`هل أنت متأكد من حذف تحصيل (${cb.courierName}) بقيمة ${cb.collectedCash.toLocaleString()} ج.م؟`)) {
                                           onDeleteSettlement(cb.settlementId);
                                         }
                                       }}
                                       className="p-1.5 text-rose-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                                      title="حذف الكشف"
+                                      title="حذف التحصيل"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
@@ -824,9 +735,9 @@ export function CourierSettlementsModal({
                               </tr>
 
                               {/* Expanded Row for Sold Items */}
-                              {isExpanded && (
+                              {isExpanded && cb.items && cb.items.length > 0 && (
                                 <tr className="bg-slate-950/90 border-y border-slate-800">
-                                  <td colSpan={10} className="p-4 sm:p-5">
+                                  <td colSpan={9} className="p-4 sm:p-5">
                                     <div className="bg-slate-900/80 rounded-xl p-4 border border-slate-800/80 space-y-3">
                                       <div className="flex items-center justify-between">
                                         <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
@@ -963,38 +874,39 @@ export function CourierSettlementsModal({
       </div>
 
       {/* ========================================================================= */}
-      {/* ADD / EDIT SETTLEMENT MODAL FORM */}
+      {/* ========================================================================= */}
+      {/* ADD / EDIT SETTLEMENT MODAL FORM (تحصيل كاش مباشر بدون أصناف) */}
       {/* ========================================================================= */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-60 overflow-y-auto bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
-          <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 z-60 overflow-y-auto bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 text-right" dir="rtl">
+          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             
             {/* Form Header */}
-            <div className="px-6 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-indigo-950/50 to-slate-900 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-emerald-950/40 to-slate-900 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
-                  <Truck className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+                  <DollarSign className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-white">
-                    {editingSettlement ? 'تعديل كشف تحصيل شركة الشحن' : 'تسجيل تحصيل شحن جديد (بيع قطاعي)'}
+                    {editingSettlement ? 'تعديل تحصيل شركة الشحن' : 'تسجيل تحصيل نقدي من شركة الشحن'}
                   </h3>
                   <p className="text-xs text-slate-400">
-                    أدخل المبلغ المستلم والمنتجات المباعة لحساب الأرباح النقدية بدقة
+                    إيداع الفلوس المقبوضة مباشرة في الخزينة وحساب الصافي بدون الحاجة لتسجيل أصناف
                   </p>
                 </div>
               </div>
 
               <button
                 onClick={() => setIsFormOpen(false)}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer"
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Form Body */}
-            <form onSubmit={handleSaveForm} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <form onSubmit={handleSaveForm} className="flex-1 overflow-y-auto p-6 space-y-5">
               
               {formError && (
                 <div className="p-3.5 bg-rose-500/20 border border-rose-500/50 rounded-xl text-rose-300 text-xs sm:text-sm font-semibold flex items-center gap-2">
@@ -1003,8 +915,8 @@ export function CourierSettlementsModal({
                 </div>
               )}
 
-              {/* 1. Courier & Manifest Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 1. Courier, Manifest & Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 
                 {/* Courier Name */}
                 <div>
@@ -1014,7 +926,7 @@ export function CourierSettlementsModal({
                   <select
                     value={formCourierName}
                     onChange={(e) => setFormCourierName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     {COMMON_COURIERS.map(c => (
                       <option key={c} value={c}>{c}</option>
@@ -1028,7 +940,7 @@ export function CourierSettlementsModal({
                       value={formCustomCourier}
                       onChange={(e) => setFormCustomCourier(e.target.value)}
                       placeholder="اكتب اسم شركة الشحن أو المندوب..."
-                      className="w-full mt-2 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full mt-2 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500"
                     />
                   )}
                 </div>
@@ -1036,14 +948,14 @@ export function CourierSettlementsModal({
                 {/* Manifest / Waybill Number */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    رقم الكشف / البوليصة
+                    رقم الكشف / الحوالة / البوليصة
                   </label>
                   <input
                     type="text"
                     value={formManifestNumber}
                     onChange={(e) => setFormManifestNumber(e.target.value)}
-                    placeholder="مثال: SHP-1042 أو كشف رقم 5"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500"
+                    placeholder="مثال: SHP-1042 أو حوالة رقم 5"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
                   />
                 </div>
 
@@ -1056,206 +968,111 @@ export function CourierSettlementsModal({
                     type="date"
                     value={formDate}
                     onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
                   />
                 </div>
 
               </div>
 
-              {/* 2. Items Sold in Retail */}
-              <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                    <Package className="w-4 h-4 text-indigo-400" />
-                    المنتجات المباعة في هذه الشحنات
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={handleAddItemToForm}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>إضافة منتج آخر</span>
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {formItems.map((it, idx) => (
-                    <div key={it.id || idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2.5 bg-slate-900 rounded-xl border border-slate-800 items-center">
-                      
-                      {/* Product Name */}
-                      <div className="sm:col-span-4">
-                        <label className="block text-[10px] text-slate-400 mb-1">اسم الصنف</label>
-                        <select
-                          value={it.productName}
-                          onChange={(e) => handleUpdateItemInForm(idx, 'productName', e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                        >
-                          {products.map(p => (
-                            <option key={p.id} value={p.name}>{p.name}</option>
-                          ))}
-                          {pricingTiers.map(t => (
-                            <option key={t.id} value={t.productName}>{t.productName}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Quantity */}
-                      <div className="sm:col-span-2">
-                        <label className="block text-[10px] text-slate-400 mb-1">الكمية</label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="any"
-                          value={it.quantity}
-                          onChange={(e) => handleUpdateItemInForm(idx, 'quantity', Number(e.target.value))}
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white text-center focus:outline-none focus:border-indigo-500 font-mono"
-                        />
-                      </div>
-
-                      {/* Unit */}
-                      <div className="sm:col-span-2">
-                        <label className="block text-[10px] text-slate-400 mb-1">الوحدة</label>
-                        <select
-                          value={it.unit}
-                          onChange={(e) => handleUpdateItemInForm(idx, 'unit', e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                        >
-                          <option value="قطعة">قطعة</option>
-                          <option value="كرتونة">كرتونة</option>
-                        </select>
-                      </div>
-
-                      {/* Retail Unit Price */}
-                      <div className="sm:col-span-2">
-                        <label className="block text-[10px] text-slate-400 mb-1">سعر بيع القطاعي (ج.م)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={it.retailUnitPrice}
-                          onChange={(e) => handleUpdateItemInForm(idx, 'retailUnitPrice', Number(e.target.value))}
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white text-center focus:outline-none focus:border-indigo-500 font-mono font-bold text-indigo-300"
-                        />
-                      </div>
-
-                      {/* Line Total & Remove */}
-                      <div className="sm:col-span-2 flex items-center justify-between gap-1 pt-4 sm:pt-0">
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-500 block">الإجمالي:</span>
-                          <span className="text-xs font-bold text-white">{it.totalAmount.toLocaleString()} ج.م</span>
-                        </div>
-                        {formItems.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItemFromForm(idx)}
-                            className="p-1.5 text-rose-500 hover:bg-rose-950/40 rounded-lg cursor-pointer"
-                            title="حذف هذا الصنف"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs font-semibold">
-                  <span className="text-slate-400">إجمالي قيمة البضاعة المباعة قطاعي:</span>
-                  <span className="text-base font-black text-white">{formTotalOrderValue.toLocaleString()} ج.م</span>
-                </div>
-
-              </div>
-
-              {/* 3. Cash Collection & Shipping Fee */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/80 p-4 rounded-2xl border border-slate-800">
+              {/* 2. Financials: Collected Cash, Shipping Fees, Payment Method */}
+              <div className="bg-slate-950/80 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-4">
                 
-                {/* Collected Cash */}
-                <div>
-                  <label className="block text-xs font-bold text-emerald-400 mb-1.5 flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4" />
-                    المبلغ المحصل من شركة الشحن (الفلوس المقبوضة فعلياً) <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    required
-                    placeholder="مثال: 5400"
-                    value={formCollectedCash}
-                    onChange={(e) => setFormCollectedCash(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-slate-900 border-2 border-emerald-500/50 rounded-xl px-3.5 py-2.5 text-base font-black text-emerald-300 focus:outline-none focus:border-emerald-400 font-mono"
-                  />
-                  <span className="text-[11px] text-slate-500 mt-1 block">
-                    المبلغ اللي استلمته في يدك أو في حسابك البنكي من مندوب/شركة الشحن
-                  </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  
+                  {/* Collected Cash */}
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-400 mb-1.5 flex items-center gap-1.5">
+                      <DollarSign className="w-4 h-4" />
+                      المبلغ المحصل (ج.م) <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      required
+                      placeholder="مثال: 5400"
+                      value={formCollectedCash}
+                      onChange={(e) => setFormCollectedCash(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full bg-slate-900 border-2 border-emerald-500/60 rounded-xl px-3.5 py-2.5 text-base font-black text-emerald-300 focus:outline-none focus:border-emerald-400 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      إجمالي الفلوس المقبوضة
+                    </span>
+                  </div>
+
+                  {/* Shipping Fee Deducted */}
+                  <div>
+                    <label className="block text-xs font-bold text-rose-400 mb-1.5 flex items-center gap-1.5">
+                      <Truck className="w-4 h-4" />
+                      مصاريف الشحن المخصومة
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="0 أو مثال: 350"
+                      value={formShippingFee}
+                      onChange={(e) => setFormShippingFee(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-base font-bold text-rose-300 focus:outline-none focus:border-rose-400 font-mono"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      عمولة شركة الشحن المخصومة
+                    </span>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className="block text-xs font-bold text-indigo-300 mb-1.5">
+                      طريقة الاستلام والإيداع
+                    </label>
+                    <select
+                      value={formPaymentMethod}
+                      onChange={(e) => setFormPaymentMethod(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      {COURIER_PAYMENT_METHODS.map(m => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      الحساب المستلم فيه الفلوس
+                    </span>
+                  </div>
+
                 </div>
 
-                {/* Shipping Fee Deducted */}
-                <div>
-                  <label className="block text-xs font-bold text-rose-400 mb-1.5 flex items-center gap-1.5">
-                    <Truck className="w-4 h-4" />
-                    مصاريف وعمولة الشحن المخصومة (إن وجدت)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    placeholder="مثال: 350"
-                    value={formShippingFee}
-                    onChange={(e) => setFormShippingFee(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-base font-bold text-rose-300 focus:outline-none focus:border-rose-400 font-mono"
-                  />
-                  <span className="text-[11px] text-slate-500 mt-1 block">
-                    يتم خصمها من صافي الربح النهائي
-                  </span>
+                {/* Live Net Received Calculation Card */}
+                <div className="bg-gradient-to-r from-slate-900 via-emerald-950/30 to-slate-900 p-4 rounded-xl border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <span className="text-[11px] text-slate-400 font-medium">حسبة الصافي المستلم:</span>
+                    <div className="text-xs text-slate-300 font-mono">
+                      <span className="text-emerald-400 font-bold">{(Number(formCollectedCash) || 0).toLocaleString()} ج.م</span>
+                      {' '}-{' '}
+                      <span className="text-rose-400 font-bold">{(Number(formShippingFee) || 0).toLocaleString()} ج.م</span>
+                    </div>
+                  </div>
+
+                  <div className="text-left">
+                    <span className="text-[11px] text-amber-300 block font-bold">صافي المبلغ المقبوض في الخزينة</span>
+                    <span className="text-xl font-black text-amber-300 font-mono">
+                      +{formNetReceived.toLocaleString()} ج.م
+                    </span>
+                  </div>
                 </div>
 
               </div>
 
-              {/* 4. Live Profits Preview Card */}
-              <div className="bg-gradient-to-br from-indigo-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border border-indigo-500/30 space-y-3">
-                <div className="flex items-center gap-2 text-indigo-300 font-bold text-xs">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>معاينة حية للأرباح المحققة من هذا التحصيل:</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-teal-500/20">
-                    <span className="text-[10px] text-slate-400 block mb-0.5">ربح الشركة المحصل</span>
-                    <strong className="text-sm font-black text-teal-400">
-                      +{formLiveProfit.realizedCompanyProfit.toLocaleString()} ج.م
-                    </strong>
-                  </div>
-
-                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-blue-500/20">
-                    <span className="text-[10px] text-slate-400 block mb-0.5">ربح المصنع المحصل</span>
-                    <strong className="text-sm font-black text-blue-400">
-                      +{formLiveProfit.realizedFactoryProfit.toLocaleString()} ج.م
-                    </strong>
-                  </div>
-
-                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-amber-500/40 shadow-inner">
-                    <span className="text-[10px] text-amber-300 block mb-0.5 font-bold">صافي الربح في الجيب</span>
-                    <strong className="text-sm font-black text-amber-300">
-                      +{formLiveProfit.realizedTotalProfit.toLocaleString()} ج.م
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. Notes */}
+              {/* 3. Notes */}
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">
-                  ملاحظات إضافية
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                  ملاحظات أو بيان إضافي
                 </label>
                 <input
                   type="text"
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
-                  placeholder="أي تفاصيل عن مناطق التوزيع أو أرقام الحوالات..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  placeholder="أي تفاصيل عن رقم الحوالة، أوردرات معينة، أو ملاحظات التسليم..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
@@ -1272,14 +1089,14 @@ export function CourierSettlementsModal({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition-all cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <span>جارٍ الحفظ...</span>
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>{editingSettlement ? 'حفظ التعديلات' : 'تسجيل التحصيل والأرباح'}</span>
+                      <span>{editingSettlement ? 'حفظ التعديلات' : 'تسجيل التحصيل في الخزينة'}</span>
                     </>
                   )}
                 </button>

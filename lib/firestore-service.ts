@@ -356,7 +356,7 @@ export function subscribeToSalaryPayments(
   onData: (payments: SalaryPaymentRecord[]) => void,
   onError?: (err: Error) => void
 ) {
-  const q = query(collection(db, SALARY_PAYMENTS_COLLECTION), orderBy('paymentDate', 'desc'));
+  const q = query(collection(db, SALARY_PAYMENTS_COLLECTION));
 
   return onSnapshot(
     q,
@@ -369,6 +369,7 @@ export function subscribeToSalaryPayments(
           ...data,
         } as SalaryPaymentRecord);
       });
+      items.sort((a, b) => (b.paymentDate || b.month || '').localeCompare(a.paymentDate || a.month || ''));
       onData(items);
     },
     (error) => {
@@ -402,7 +403,7 @@ export function subscribeToEmployeeTransactions(
   onData: (transactions: EmployeeTransaction[]) => void,
   onError?: (err: Error) => void
 ) {
-  const q = query(collection(db, EMPLOYEE_TRANSACTIONS_COLLECTION), orderBy('date', 'desc'));
+  const q = query(collection(db, EMPLOYEE_TRANSACTIONS_COLLECTION));
 
   return onSnapshot(
     q,
@@ -415,6 +416,7 @@ export function subscribeToEmployeeTransactions(
           ...data,
         } as EmployeeTransaction);
       });
+      items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       onData(items);
     },
     (error) => {

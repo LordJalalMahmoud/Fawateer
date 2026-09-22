@@ -165,13 +165,14 @@ export interface RetailSoldItem {
 export interface CourierSettlement {
   id: string;
   courierName: string; // اسم شركة الشحن (بوسطة، أوتو، شيب بلو، ارامكس، مندوب، etc.)
-  manifestNumber: string; // رقم الكشف أو البوليصة أو الشحنة
+  manifestNumber: string; // رقم الكشف أو البوليصة أو الشحنة / رقم التحويل
   date: string; // YYYY-MM-DD
   collectedCash: number; // المبلغ المحصل من شركة الشحن (الفلوس المقبوضة)
   shippingFeeDeducted: number; // مصاريف وعمولة شركة الشحن المخصومة
-  totalOrderValue: number; // إجمالي قيمة البضاعة المباعة قطاعي
+  totalOrderValue?: number; // إجمالي قيمة البضاعة المباعة قطاعي (اختياري)
   netCashReceived: number; // صافي المبلغ المستلم فعلياً
-  items: RetailSoldItem[];
+  items?: RetailSoldItem[]; // اختياري (لم يعد إجبارياً - يمكن تحصيل مالي مباشر فقط)
+  paymentMethod?: string; // طريقة الاستلام (كاش، إنستاباي، تحويل بنكي، فودافون كاش، شيك)
   notes?: string;
   status: 'COMPLETED' | 'PARTIAL' | 'PENDING';
   createdAt: string;
