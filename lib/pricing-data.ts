@@ -163,10 +163,13 @@ export function calculateItemProfit(
   paidRatio: number = 1,
   products?: ProductCatalogItem[]
 ): ItemProfitCalculation {
-  const tier = findPricingTier(item.name, tiers);
-  const matchedProduct = products?.find(p => normalizeName(p.name) === normalizeName(item.name));
-  const qty = Number(item.quantity) || 0;
-  const merchantUnitPrice = Number(item.unitPrice) || 0;
+  const itemName = item?.name || '';
+  const tier = findPricingTier(itemName, tiers || []);
+  const matchedProduct = Array.isArray(products) 
+    ? products.find(p => p && p.name && normalizeName(p.name) === normalizeName(itemName)) 
+    : undefined;
+  const qty = Number(item?.quantity) || 0;
+  const merchantUnitPrice = Number(item?.unitPrice) || 0;
   
   // Default to merchant price if tier not found, or standard fallback
   let factoryUnitPrice = merchantUnitPrice * 0.7;
@@ -345,11 +348,14 @@ export function calculateCourierSettlementProfit(
     paidRatio = Math.min(1, Math.max(0, collectedCash / totalRetailValue));
   }
 
-  const itemsCalculations: CourierItemProfitCalculation[] = settlement.items!.map(it => {
-    const tier = findPricingTier(it.productName, tiers);
-    const matchedProduct = products?.find(p => normalizeName(p.name) === normalizeName(it.productName));
-    const qty = Number(it.quantity) || 0;
-    const retailUnitPrice = Number(it.retailUnitPrice) || 0;
+  const itemsCalculations: CourierItemProfitCalculation[] = (settlement.items || []).map(it => {
+    const prodName = it?.productName || '';
+    const tier = findPricingTier(prodName, tiers || []);
+    const matchedProduct = Array.isArray(products)
+      ? products.find(p => p && p.name && normalizeName(p.name) === normalizeName(prodName))
+      : undefined;
+    const qty = Number(it?.quantity) || 0;
+    const retailUnitPrice = Number(it?.retailUnitPrice) || 0;
     const retailRevenueTotal = Number((qty * retailUnitPrice).toFixed(2));
     
     // Check unit: piece vs carton

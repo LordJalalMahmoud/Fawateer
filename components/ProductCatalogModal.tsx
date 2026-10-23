@@ -28,7 +28,7 @@ interface ProductCatalogModalProps {
 export function ProductCatalogModal({
   isOpen,
   onClose,
-  products,
+  products = [],
   onSaveProducts,
   pricingTiers = [],
   onSavePricingTiers,
@@ -52,41 +52,44 @@ export function ProductCatalogModal({
   const [editFactoryPrice, setEditFactoryPrice] = useState<number | ''>('');
   const [editPrice, setEditPrice] = useState<number | ''>('');
 
-  if (!isOpen) return null;
+  // Safeguard array
+  const safeProducts = useMemo(() => Array.isArray(products) ? products : [], [products]);
 
   // Categories list for quick filtering
   const categories = useMemo(() => {
     const set = new Set<string>();
-    products.forEach(p => {
-      if (p.category && p.category.trim()) {
+    safeProducts.forEach(p => {
+      if (p && p.category && typeof p.category === 'string' && p.category.trim()) {
         set.add(p.category.trim());
       }
     });
     return Array.from(set);
-  }, [products]);
+  }, [safeProducts]);
 
   // Filtered products by search query and category
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch = !q || 
-        p.name.toLowerCase().includes(q) ||
-        (p.category && p.category.toLowerCase().includes(q)) ||
-        (p.unit && p.unit.toLowerCase().includes(q));
-      
+    const q = searchQuery.toLowerCase().trim();
+    return safeProducts.filter(p => {
+      if (!p) return false;
+      const name = p.name ? String(p.name).toLowerCase() : '';
+      const cat = p.category ? String(p.category).toLowerCase() : '';
+      const unit = p.unit ? String(p.unit).toLowerCase() : '';
+
+      const matchesSearch = !q || name.includes(q) || cat.includes(q) || unit.includes(q);
       const matchesCat = selectedCategory === 'ALL' || p.category === selectedCategory;
       return matchesSearch && matchesCat;
     });
-  }, [products, searchQuery, selectedCategory]);
+  }, [safeProducts, searchQuery, selectedCategory]);
 
   // Overall Statistics Calculation
   const stats = useMemo(() => {
-    let totalItems = products.length;
+    let totalItems = safeProducts.length;
     let pricedItems = 0;
     let totalProfitPerUnit = 0;
     let totalMarginSum = 0;
 
-    products.forEach(p => {
+    safeProducts.forEach(p => {
+      if (!p) return;
       const cost = Number(p.factoryPrice) || 0;
       const sale = Number(p.defaultPrice) || 0;
       if (cost > 0 && sale > 0) {
@@ -101,7 +104,7 @@ export function ProductCatalogModal({
     const avgProfit = pricedItems > 0 ? Math.round(totalProfitPerUnit / pricedItems) : 0;
 
     return { totalItems, pricedItems, avgMargin, avgProfit };
-  }, [products]);
+  }, [safeProducts]);
 
   // Start editing a product
   const handleStartEdit = (prod: ProductCatalogItem) => {
@@ -239,6 +242,8 @@ export function ProductCatalogModal({
   const editSaleNum = typeof editPrice === 'number' ? editPrice : 0;
   const editProfit = editSaleNum - editFactoryNum;
   const editMarginPct = editFactoryNum > 0 ? ((editProfit / editFactoryNum) * 100).toFixed(1) : null;
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 no-print">
