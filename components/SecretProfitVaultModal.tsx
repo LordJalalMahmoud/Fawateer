@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { 
   Invoice, 
   ProductPricingTier, 
+  ProductCatalogItem,
   VaultSettings, 
   InvoiceProfitBreakdown, 
   ItemProfitCalculation,
@@ -57,6 +58,7 @@ interface SecretProfitVaultModalProps {
   courierSettlements?: CourierSettlement[];
   expenses?: ExpenseItem[];
   pricingTiers: ProductPricingTier[];
+  products?: ProductCatalogItem[];
   vaultSettings: VaultSettings;
   onSavePricingTiers: (tiers: ProductPricingTier[]) => Promise<void>;
   onSaveVaultSettings: (settings: VaultSettings) => Promise<void>;
@@ -72,6 +74,7 @@ export function SecretProfitVaultModal({
   courierSettlements = [],
   expenses = [],
   pricingTiers,
+  products = [],
   vaultSettings,
   onSavePricingTiers,
   onSaveVaultSettings,
@@ -185,8 +188,8 @@ export function SecretProfitVaultModal({
 
   // Calculate detailed profits across filtered invoices
   const invoiceProfits: InvoiceProfitBreakdown[] = useMemo(() => {
-    return filteredInvoices.map(inv => calculateInvoiceProfit(inv, pricingTiers));
-  }, [filteredInvoices, pricingTiers]);
+    return filteredInvoices.map(inv => calculateInvoiceProfit(inv, pricingTiers, products));
+  }, [filteredInvoices, pricingTiers, products]);
 
   // Aggregate Totals - Invoiced (All Billed Invoices)
   const invoicedTotals = useMemo(() => {
@@ -500,8 +503,8 @@ export function SecretProfitVaultModal({
 
   // Courier / Retail Profits Calculations in Secret Vault
   const courierProfitsList = useMemo<CourierProfitBreakdown[]>(() => {
-    return (courierSettlements || []).map(s => calculateCourierSettlementProfit(s, pricingTiers));
-  }, [courierSettlements, pricingTiers]);
+    return (courierSettlements || []).map(s => calculateCourierSettlementProfit(s, pricingTiers, products));
+  }, [courierSettlements, pricingTiers, products]);
 
   const courierTotalCollected = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.collectedCash, 0), [courierProfitsList]);
   const courierTotalRetailValue = useMemo(() => courierProfitsList.reduce((sum, s) => sum + s.totalRetailValue, 0), [courierProfitsList]);

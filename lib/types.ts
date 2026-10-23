@@ -49,7 +49,8 @@ export interface ProductCatalogItem {
   name: string;
   category: string;
   unit: string;
-  defaultPrice: number;
+  factoryPrice?: number; // سعر المصنع (سعر التكلفة)
+  defaultPrice: number;  // سعر البيع الافتراضي
   barcode?: string;
 }
 

@@ -1134,6 +1134,8 @@ function InvoicesDashboard() {
         onClose={() => setIsProductCatalogOpen(false)}
         products={products}
         onSaveProducts={updateProducts}
+        pricingTiers={pricingTiers}
+        onSavePricingTiers={handleSavePricingTiers}
       />
 
       {/* 5. Team / Admins Management Modal */}
@@ -1209,6 +1211,7 @@ function InvoicesDashboard() {
         courierSettlements={courierSettlements}
         expenses={expenses}
         pricingTiers={pricingTiers}
+        products={products}
         vaultSettings={vaultSettings}
         onSavePricingTiers={handleSavePricingTiers}
         onSaveVaultSettings={handleSaveVaultSettings}

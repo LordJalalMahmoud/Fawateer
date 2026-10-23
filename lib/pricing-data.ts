@@ -1,5 +1,6 @@
 import { 
   ProductPricingTier, 
+  ProductCatalogItem,
   Invoice, 
   InvoiceItem, 
   InvoiceProfitBreakdown, 
@@ -154,20 +155,30 @@ export function findPricingTier(productName: string, tiers: ProductPricingTier[]
 }
 
 /**
- * Calculate item profit breakdown based on pricing tiers
+ * Calculate item profit breakdown based on pricing tiers or product catalog
  */
 export function calculateItemProfit(
   item: InvoiceItem, 
   tiers: ProductPricingTier[], 
-  paidRatio: number = 1
+  paidRatio: number = 1,
+  products?: ProductCatalogItem[]
 ): ItemProfitCalculation {
   const tier = findPricingTier(item.name, tiers);
+  const matchedProduct = products?.find(p => normalizeName(p.name) === normalizeName(item.name));
   const qty = Number(item.quantity) || 0;
   const merchantUnitPrice = Number(item.unitPrice) || 0;
   
   // Default to merchant price if tier not found, or standard fallback
-  const factoryUnitPrice = tier ? tier.factoryPrice : merchantUnitPrice * 0.7;
-  const companyUnitPrice = tier ? tier.companyPrice : merchantUnitPrice * 0.85;
+  let factoryUnitPrice = merchantUnitPrice * 0.7;
+  let companyUnitPrice = merchantUnitPrice * 0.85;
+
+  if (tier) {
+    factoryUnitPrice = tier.factoryPrice;
+    companyUnitPrice = tier.companyPrice;
+  } else if (matchedProduct && matchedProduct.factoryPrice !== undefined && matchedProduct.factoryPrice > 0) {
+    factoryUnitPrice = matchedProduct.factoryPrice;
+    companyUnitPrice = matchedProduct.defaultPrice > 0 ? matchedProduct.defaultPrice : merchantUnitPrice;
+  }
 
   const merchantRevenueTotal = Number((qty * merchantUnitPrice).toFixed(2));
   const companyCostTotal = Number((qty * companyUnitPrice).toFixed(2));
@@ -222,7 +233,11 @@ export function calculateItemProfit(
 /**
  * Calculate invoice profit breakdown
  */
-export function calculateInvoiceProfit(invoice: Invoice, tiers: ProductPricingTier[]): InvoiceProfitBreakdown {
+export function calculateInvoiceProfit(
+  invoice: Invoice, 
+  tiers: ProductPricingTier[],
+  products?: ProductCatalogItem[]
+): InvoiceProfitBreakdown {
   const totalAmount = Number(invoice.totalAmount) || 0;
   const paidAmount = Number(invoice.paidAmount) || 0;
   const remainingAmount = Number(invoice.remainingAmount ?? Math.max(0, totalAmount - paidAmount)) || 0;
@@ -234,7 +249,7 @@ export function calculateInvoiceProfit(invoice: Invoice, tiers: ProductPricingTi
     paidRatio = 1;
   }
 
-  const itemsProfit = (invoice.items || []).map(it => calculateItemProfit(it, tiers, paidRatio));
+  const itemsProfit = (invoice.items || []).map(it => calculateItemProfit(it, tiers, paidRatio, products));
 
   const invoiceMerchantRevenue = Number(itemsProfit.reduce((sum, it) => sum + it.merchantRevenueTotal, 0).toFixed(2));
   const invoiceCompanyCost = Number(itemsProfit.reduce((sum, it) => sum + it.companyCostTotal, 0).toFixed(2));
@@ -291,7 +306,8 @@ export function calculateInvoiceProfit(invoice: Invoice, tiers: ProductPricingTi
  */
 export function calculateCourierSettlementProfit(
   settlement: CourierSettlement, 
-  tiers: ProductPricingTier[]
+  tiers: ProductPricingTier[],
+  products?: ProductCatalogItem[]
 ): CourierProfitBreakdown {
   const collectedCash = Number(settlement.collectedCash) || 0;
   const shippingFeeDeducted = Number(settlement.shippingFeeDeducted) || 0;
@@ -331,6 +347,7 @@ export function calculateCourierSettlementProfit(
 
   const itemsCalculations: CourierItemProfitCalculation[] = settlement.items!.map(it => {
     const tier = findPricingTier(it.productName, tiers);
+    const matchedProduct = products?.find(p => normalizeName(p.name) === normalizeName(it.productName));
     const qty = Number(it.quantity) || 0;
     const retailUnitPrice = Number(it.retailUnitPrice) || 0;
     const retailRevenueTotal = Number((qty * retailUnitPrice).toFixed(2));
@@ -342,8 +359,16 @@ export function calculateCourierSettlementProfit(
       unitMultiplier = 1 / pieces;
     }
 
-    const factoryCostPerUnit = tier ? tier.factoryPrice * unitMultiplier : retailUnitPrice * 0.5;
-    const companyCostPerUnit = tier ? tier.companyPrice * unitMultiplier : retailUnitPrice * 0.7;
+    let factoryCostPerUnit = retailUnitPrice * 0.5;
+    let companyCostPerUnit = retailUnitPrice * 0.7;
+
+    if (tier) {
+      factoryCostPerUnit = tier.factoryPrice * unitMultiplier;
+      companyCostPerUnit = tier.companyPrice * unitMultiplier;
+    } else if (matchedProduct && matchedProduct.factoryPrice !== undefined && matchedProduct.factoryPrice > 0) {
+      factoryCostPerUnit = matchedProduct.factoryPrice * unitMultiplier;
+      companyCostPerUnit = (matchedProduct.defaultPrice > 0 ? matchedProduct.defaultPrice : retailUnitPrice) * unitMultiplier;
+    }
 
     const factoryCostTotal = Number((qty * factoryCostPerUnit).toFixed(2));
     const companyCostTotal = Number((qty * companyCostPerUnit).toFixed(2));
